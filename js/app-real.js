@@ -526,16 +526,42 @@ function renderCredits() {
 }
 
 async function buyPackage(pkgId) {
-  if (!confirm('确认支付？当前为模拟支付，点击即到账。')) return;
+  // 先获取系统状态，判断 Stripe 是否配置
   try {
-    const data = await api.post('/api/payment/create-order', { packageId: pkgId });
-    showToast('支付成功！积分已到账。余额：' + data.balance, 'success');
-    state.user.credits = data.balance;
-    document.getElementById('credits-balance').textContent = data.balance;
-    document.getElementById('header-credits').textContent = data.balance;
-    loadTransactions();
+    const status = await api.get('/api/config/status');
+    const stripeReady = status.payment && status.payment.stripe;
+
+    if (!stripeReady) {
+      // Stripe 未配置，使用模拟支付
+      if (!confirm('Stripe 未配置，是否使用模拟支付（测试用）？')) return;
+      const data = await api.post('/api/payment/create-order', { packageId: pkgId });
+      showToast('模拟支付成功！积分已到账。余额：' + data.balance, 'success');
+      state.user.credits = data.balance;
+      document.getElementById('credits-balance').textContent = data.balance;
+      document.getElementById('header-credits').textContent = data.balance;
+      loadTransactions();
+      return;
+    }
+
+    // 使用 Stripe Checkout
+    const btn = document.querySelector(`#packages-grid .package-card[onclick*="${pkgId}"]`);
+    if (btn) {
+      btn.style.opacity = '0.6';
+      btn.style.pointerEvents = 'none';
+    }
+    showToast('正在跳转 Stripe 支付...', 'success');
+    const data = await api.post('/api/payment/create-stripe-session', { packageId: pkgId });
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      showToast('创建支付失败', 'error');
+    }
   } catch (e) {
     showToast('支付失败：' + e.message, 'error');
+  } finally {
+    document.querySelectorAll('#packages-grid .package-card').forEach(c => {
+      c.style.opacity = '1'; c.style.pointerEvents = 'auto';
+    });
   }
 }
 
@@ -746,7 +772,7 @@ function showPage(page) {
   switch (page) {
     case 'dashboard': main.innerHTML = renderDashboard(); break;
     case 'chat': main.innerHTML = renderChat(); selectModel('deepseek-chat'); break;
-    case 'credits': main.innerHTML = renderCredits(); loadTransactions(); break;
+    case 'credits': main.innerHTML = renderCredits(); loadTransactions(); checkPaymentReturn(); break;
     case 'tasks': main.innerHTML = renderTasks(); break;
     case 'image': main.innerHTML = renderImage(); break;
     case 'video': main.innerHTML = '<div class="coming-soon"><h2>🎬 AI 视频</h2><p>接入视频生成 API 后开放，当前积分定价：80积分/条</p></div>'; break;
@@ -762,7 +788,31 @@ function updateNavActive(page) {
   });
 }
 
-function renderProfile() {
+function checkPaymentReturn() {
+  const hash = window.location.hash;
+  if (hash.includes('paid=success')) {
+    const orderMatch = hash.match(/order=([^&]+)/);
+    showToast('支付成功！积分将在稍后到账（Stripe 处理中）', 'success');
+    // 刷新余额
+    setTimeout(() => loadUserInfo(), 1500);
+    // 清理 URL 参数
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash.split('?')[0]);
+  } else if (hash.includes('paid=cancel')) {
+    showToast('支付已取消', 'error');
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash.split('?')[0]);
+  }
+}
+
+async function loadUserInfo() {
+  try {
+    const data = await api.get('/api/auth/me');
+    if (data.user) {
+      state.user.credits = data.user.credits;
+      if (document.getElementById('credits-balance')) document.getElementById('credits-balance').textContent = data.user.credits;
+      if (document.getElementById('header-credits')) document.getElementById('header-credits').textContent = data.user.credits;
+    }
+  } catch (e) { console.error('loadUserInfo error', e); }
+}
   const u = state.user;
   return `
     <div class="page-profile">
