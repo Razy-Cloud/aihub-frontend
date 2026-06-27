@@ -12,6 +12,7 @@ const state = {
   config: { mockMode: true, providers: {} },
   currentModel: 'deepseek-chat',
   chatHistory: [],
+  selectedPackage: null,
 };
 
 // 加载系统配置
@@ -488,32 +489,36 @@ function renderCredits() {
         </div>
       </div>
       <div class="recharge-section">
-        <h3>充值积分包</h3>
+        <h3>选择充值积分包</h3>
         <div class="packages-grid" id="packages-grid">
-          <div class="package-card" onclick="buyPackage('pkg_9')">
+          <div class="package-card" data-pkg="pkg_9" onclick="selectPackage('pkg_9')">
             <div class="pkg-price">¥9.9</div>
             <div class="pkg-credits">100 积分</div>
             <div class="pkg-name">体验档</div>
             <div class="pkg-per">¥0.099/积分</div>
+            <div class="paypal-button-container" id="paypal-btn-pkg_9"></div>
           </div>
-          <div class="package-card recommended" onclick="buyPackage('pkg_29')">
+          <div class="package-card recommended" data-pkg="pkg_29" onclick="selectPackage('pkg_29')">
             <div class="pkg-badge">推荐</div>
             <div class="pkg-price">¥29.9</div>
             <div class="pkg-credits">350 积分</div>
             <div class="pkg-name">入门档</div>
             <div class="pkg-per">¥0.085/积分</div>
+            <div class="paypal-button-container" id="paypal-btn-pkg_29"></div>
           </div>
-          <div class="package-card" onclick="buyPackage('pkg_99')">
+          <div class="package-card" data-pkg="pkg_99" onclick="selectPackage('pkg_99')">
             <div class="pkg-price">¥99</div>
             <div class="pkg-credits">1200 积分</div>
             <div class="pkg-name">常用档</div>
             <div class="pkg-per">¥0.082/积分</div>
+            <div class="paypal-button-container" id="paypal-btn-pkg_99"></div>
           </div>
-          <div class="package-card" onclick="buyPackage('pkg_299')">
+          <div class="package-card" data-pkg="pkg_299" onclick="selectPackage('pkg_299')">
             <div class="pkg-price">¥299</div>
             <div class="pkg-credits">4000 积分</div>
             <div class="pkg-name">重度档</div>
             <div class="pkg-per">¥0.075/积分</div>
+            <div class="paypal-button-container" id="paypal-btn-pkg_299"></div>
           </div>
         </div>
       </div>
@@ -525,44 +530,118 @@ function renderCredits() {
   `;
 }
 
-async function buyPackage(pkgId) {
-  // 先获取系统状态，判断 PayPal 是否配置
+function selectPackage(pkgId) {
+  state.selectedPackage = pkgId;
+  document.querySelectorAll('#packages-grid .package-card').forEach(card => {
+    card.classList.toggle('paypal-selected', card.dataset.pkg === pkgId);
+  });
+}
+
+// 初始化 PayPal 按钮（在积分中心页面渲染后调用）
+async function initPayPalButtons() {
   try {
     const status = await api.get('/api/config/status');
-    const paypalReady = status.payment && status.payment.paypal;
+    const p = status.payment || {};
 
-    if (!paypalReady) {
-      // PayPal 未配置，使用模拟支付
-      if (!confirm('PayPal 未配置，是否使用模拟支付（测试用）？')) return;
-      const data = await api.post('/api/payment/create-order', { packageId: pkgId });
-      showToast('模拟支付成功！积分已到账。余额：' + data.balance, 'success');
-      state.user.credits = data.balance;
-      document.getElementById('credits-balance').textContent = data.balance;
-      document.getElementById('header-credits').textContent = data.balance;
-      loadTransactions();
+    if (!p.paypal || !p.paypalClientId) {
+      // PayPal 未配置，显示模拟支付提示
+      document.querySelectorAll('.paypal-button-container').forEach(el => {
+        el.innerHTML = '<small style="color:#999">模拟支付模式</small>';
+      });
       return;
     }
 
-    // 使用 PayPal 支付
-    const btn = document.querySelector(`#packages-grid .package-card[onclick*="${pkgId}"]`);
-    if (btn) {
-      btn.style.opacity = '0.6';
-      btn.style.pointerEvents = 'none';
-    }
-    showToast('正在创建 PayPal 订单...', 'success');
-    const data = await api.post('/api/payment/create-paypal-order', { packageId: pkgId });
-    if (data.approveUrl) {
-      // 跳转到 PayPal 批准页面
-      window.location.href = data.approveUrl;
-    } else {
-      showToast('创建支付失败', 'error');
-    }
+    await loadPayPalSDK(p.paypalClientId, p.paypalEnv);
+
+    // 为每个套餐渲染 PayPal 按钮
+    renderPayPalButton('pkg_9', 'paypal-btn-pkg_9');
+    renderPayPalButton('pkg_29', 'paypal-btn-pkg_29');
+    renderPayPalButton('pkg_99', 'paypal-btn-pkg_99');
+    renderPayPalButton('pkg_299', 'paypal-btn-pkg_299');
+  } catch (e) {
+    console.error('[PayPal] 初始化失败:', e);
+    document.querySelectorAll('.paypal-button-container').forEach(el => {
+      el.innerHTML = '<small style="color:#e74c3c">支付加载失败</small>';
+    });
+  }
+}
+
+// 动态加载 PayPal JavaScript SDK
+function loadPayPalSDK(clientId, env) {
+  return new Promise((resolve, reject) => {
+    if (window.paypal) return resolve();
+
+    const script = document.createElement('script');
+    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&intent=capture&components=buttons`;
+    script.setAttribute('data-sdk-integration-source', 'button-factory');
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('PayPal SDK 加载失败'));
+    document.head.appendChild(script);
+  });
+}
+
+// 渲染单个套餐的 PayPal 按钮
+function renderPayPalButton(pkgId, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || !window.paypal) return;
+  container.innerHTML = '';
+
+  paypal.Buttons({
+    style: {
+      layout: 'vertical',
+      color: 'gold',
+      shape: 'rect',
+      label: 'paypal',
+      height: 40,
+    },
+    createOrder: async (data, actions) => {
+      try {
+        showToast('正在创建 PayPal 订单...', 'success');
+        const res = await api.post('/api/payment/create-paypal-order', { packageId: pkgId });
+        if (res.paypalOrderId) {
+          return res.paypalOrderId;
+        }
+        throw new Error('创建订单失败');
+      } catch (e) {
+        showToast('创建订单失败：' + e.message, 'error');
+        throw e;
+      }
+    },
+    onApprove: async (data, actions) => {
+      try {
+        showToast('正在确认支付...', 'success');
+        const res = await api.post('/api/payment/capture-paypal-order', { paypalOrderId: data.orderID });
+        showToast('支付成功！积分已到账', 'success');
+        state.user.credits = res.balance;
+        document.getElementById('credits-balance').textContent = res.balance;
+        document.getElementById('header-credits').textContent = res.balance;
+        loadTransactions();
+      } catch (e) {
+        showToast('支付确认失败：' + e.message, 'error');
+      }
+    },
+    onCancel: () => {
+      showToast('支付已取消', 'error');
+    },
+    onError: (err) => {
+      console.error('[PayPal] 按钮错误:', err);
+      showToast('支付出错，请重试', 'error');
+    },
+  }).render('#' + containerId);
+}
+
+async function buyPackage(pkgId) {
+  // 备用：模拟支付（仅在 PayPal 未配置时使用）
+  try {
+    if (!confirm('是否使用模拟支付（测试用）？')) return;
+    const data = await api.post('/api/payment/create-order', { packageId: pkgId });
+    showToast('模拟支付成功！积分已到账。余额：' + data.balance, 'success');
+    state.user.credits = data.balance;
+    document.getElementById('credits-balance').textContent = data.balance;
+    document.getElementById('header-credits').textContent = data.balance;
+    loadTransactions();
   } catch (e) {
     showToast('支付失败：' + e.message, 'error');
-  } finally {
-    document.querySelectorAll('#packages-grid .package-card').forEach(c => {
-      c.style.opacity = '1'; c.style.pointerEvents = 'auto';
-    });
   }
 }
 
@@ -773,7 +852,7 @@ function showPage(page) {
   switch (page) {
     case 'dashboard': main.innerHTML = renderDashboard(); break;
     case 'chat': main.innerHTML = renderChat(); selectModel('deepseek-chat'); break;
-    case 'credits': main.innerHTML = renderCredits(); loadTransactions(); checkPaymentReturn(); break;
+    case 'credits': main.innerHTML = renderCredits(); loadTransactions(); checkPaymentReturn(); initPayPalButtons(); break;
     case 'tasks': main.innerHTML = renderTasks(); break;
     case 'image': main.innerHTML = renderImage(); break;
     case 'video': main.innerHTML = '<div class="coming-soon"><h2>🎬 AI 视频</h2><p>接入视频生成 API 后开放，当前积分定价：80积分/条</p></div>'; break;
@@ -827,6 +906,8 @@ async function loadUserInfo() {
     }
   } catch (e) { console.error('loadUserInfo error', e); }
 }
+
+function renderProfile() {
   const u = state.user;
   return `
     <div class="page-profile">
