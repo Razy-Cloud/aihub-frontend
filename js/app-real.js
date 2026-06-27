@@ -599,6 +599,145 @@ function copyInviteLink() {
   showToast('邀请链接已复制', 'success');
 }
 
+// ===== AI 绘画 =====
+function renderImage() {
+  return `
+    <div class="page-image">
+      <div style="max-width:900px;margin:0 auto;">
+        <h2 style="color:#1a1a2e;font-size:20px;font-weight:700;margin-bottom:20px;">🎨 AI 绘画</h2>
+        <div style="display:grid;grid-template-columns:320px 1fr;gap:24px;align-items:start;">
+          <!-- 左侧：输入区 -->
+          <div style="background:#fff;border:1px solid #eee;border-radius:16px;padding:24px;">
+            <div style="margin-bottom:16px;">
+              <label style="display:block;color:#555;font-size:13px;font-weight:500;margin-bottom:6px;">绘画描述</label>
+              <textarea id="img-prompt" rows="4" placeholder="描述你想要画的画面，比如：一只在太空中的猫，赛博朋克风格..."
+                style="width:100%;padding:12px 14px;background:#f8f9fc;border:1.5px solid #e8e8f0;border-radius:10px;color:#1a1a2e;font-size:14px;resize:none;font-family:inherit;box-sizing:border-box;line-height:1.5;"
+                oninput="updateCharCount()"></textarea>
+              <div style="text-align:right;font-size:12px;color:#aaa;margin-top:4px;" id="prompt-count">0/500</div>
+            </div>
+            <div style="margin-bottom:14px;">
+              <label style="display:block;color:#555;font-size:13px;font-weight:500;margin-bottom:6px;">画面风格</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="style-selector">
+                <button class="style-btn active" onclick="selectStyle('photorealistic',this)" style="padding:10px 12px;border:2px solid #7c5cfc;border-radius:10px;background:#f0ecff;cursor:pointer;font-size:13px;color:#7c5cfc;font-weight:500;transition:all 0.2s;">📸 写实照片</button>
+                <button class="style-btn" onclick="selectStyle('anime',this)" style="padding:10px 12px;border:2px solid #eee;border-radius:10px;background:#fff;cursor:pointer;font-size:13px;color:#666;font-weight:400;transition:all 0.2s;">🎌 动漫风格</button>
+                <button class="style-btn" onclick="selectStyle('oilpainting',this)" style="padding:10px 12px;border:2px solid #eee;border-radius:10px;background:#fff;cursor:pointer;font-size:13px;color:#666;font-weight:400;transition:all 0.2s;">🖼️ 油画风格</button>
+                <button class="style-btn" onclick="selectStyle('cyberpunk',this)" style="padding:10px 12px;border:2px solid #eee;border-radius:10px;background:#fff;cursor:pointer;font-size:13px;color:#666;font-weight:400;transition:all 0.2s;">🌃 赛博朋克</button>
+              </div>
+            </div>
+            <div style="margin-bottom:18px;">
+              <label style="display:block;color:#555;font-size:13px;font-weight:500;margin-bottom:6px;">图片尺寸</label>
+              <div style="display:flex;gap:8px;">
+                <button class="size-btn active" onclick="selectSize('512x512',this)" style="flex:1;padding:8px;border:2px solid #7c5cfc;border-radius:8px;background:#f0ecff;cursor:pointer;font-size:12px;color:#7c5cfc;font-weight:500;">正方形 1:1</button>
+                <button class="size-btn" onclick="selectSize('768x512',this)" style="flex:1;padding:8px;border:2px solid #eee;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;color:#666;font-weight:400;">横图 3:2</button>
+                <button class="size-btn" onclick="selectSize('512x768',this)" style="flex:1;padding:8px;border:2px solid #eee;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;color:#666;font-weight:400;">竖图 2:3</button>
+              </div>
+            </div>
+            <div style="background:#f8f6ff;border:1px solid #ece6ff;border-radius:10px;padding:12px 16px;margin-bottom:18px;">
+              <div style="display:flex;justify-content:space-between;font-size:13px;color:#888;margin-bottom:4px;">
+                <span>消耗积分</span><span style="color:#7c5cfc;font-weight:600;">8 积分/张</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;color:#888;">
+                <span>当前余额</span><span id="img-credits">${state.user.credits} 积分</span>
+              </div>
+            </div>
+            <button class="btn-primary" id="gen-btn" onclick="generateImage()" style="width:100%;padding:13px;font-size:15px;border-radius:12px;">🎨 开始生成</button>
+          </div>
+          <!-- 右侧：结果区 -->
+          <div style="background:#fff;border:1px solid #eee;border-radius:16px;padding:24px;min-height:400px;">
+            <div id="img-result">
+              <div style="text-align:center;color:#aaa;padding:80px 20px;">
+                <div style="font-size:48px;margin-bottom:16px;">🎨</div>
+                <p style="font-size:15px;margin:0 0 6px;">输入描述，选择风格，开始创作</p>
+                <p style="font-size:13px;color:#ccc;">生成一张图片消耗 8 积分</p>
+              </div>
+            </div>
+            <div id="img-history" style="margin-top:24px;display:none;">
+              <h4 style="color:#333;font-size:14px;font-weight:600;margin-bottom:12px;">历史记录</h4>
+              <div id="img-history-list" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+let currentStyle = 'photorealistic';
+let currentSize = '512x512';
+
+function updateCharCount() {
+  const len = document.getElementById('img-prompt').value.length;
+  document.getElementById('prompt-count').textContent = len + '/500';
+}
+
+function selectStyle(style, btn) {
+  currentStyle = style;
+  document.querySelectorAll('.style-btn').forEach(b => {
+    b.style.borderColor = '#eee'; b.style.background = '#fff'; b.style.color = '#666'; b.style.fontWeight = '400';
+  });
+  btn.style.borderColor = '#7c5cfc'; btn.style.background = '#f0ecff'; btn.style.color = '#7c5cfc'; btn.style.fontWeight = '500';
+}
+
+function selectSize(size, btn) {
+  currentSize = size;
+  document.querySelectorAll('.size-btn').forEach(b => {
+    b.style.borderColor = '#eee'; b.style.background = '#fff'; b.style.color = '#666'; b.style.fontWeight = '400';
+  });
+  btn.style.borderColor = '#7c5cfc'; btn.style.background = '#f0ecff'; btn.style.color = '#7c5cfc'; btn.style.fontWeight = '500';
+}
+
+async function generateImage() {
+  const prompt = document.getElementById('img-prompt').value.trim();
+  if (!prompt) return showToast('请输入绘画描述', 'error');
+  if (prompt.length < 2) return showToast('描述太短了', 'error');
+
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.textContent = '🎨 生成中...';
+
+  const resultEl = document.getElementById('img-result');
+
+  try {
+    const data = await api.post('/api/image/generate', { prompt, style: currentStyle, size: currentSize });
+    // 显示生成的图片
+    resultEl.innerHTML = `
+      <div style="text-align:center;">
+        <img src="${data.imageUrl}" alt="${escHtml(data.prompt)}"
+          style="max-width:100%;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.08);cursor:pointer;"
+          onclick="window.open(this.src,'_blank')">
+        <div style="margin-top:14px;text-align:left;">
+          <p style="font-size:13px;color:#888;margin:0 0 6px;"><strong>提示词：</strong>${escHtml(data.prompt)}</p>
+          <p style="font-size:12px;color:#aaa;margin:0 0 12px;">风格：${currentStyle} ｜ 尺寸：${data.size} ｜ 消耗：${data.cost} 积分</p>
+          <div style="display:flex;gap:8px;">
+            <button onclick="window.open(document.querySelector('#img-result img').src,'_blank')" style="padding:7px 16px;border:1.5px solid #7c5cfc;background:#fff;color:#7c5cfc;border-radius:8px;cursor:pointer;font-size:13px;">🔍 查看大图</button>
+            <button onclick="downloadImage()" style="padding:7px 16px;border:1.5px solid #7c5cfc;background:#fff;color:#7c5cfc;border-radius:8px;cursor:pointer;font-size:13px;">💾 保存图片</button>
+          </div>
+        </div>
+      </div>
+    `;
+    // 更新余额
+    state.user.credits = data.balance;
+    document.getElementById('img-credits').textContent = data.balance + ' 积分';
+    document.getElementById('header-credits').textContent = data.balance;
+    showToast('生成成功！消耗 ' + data.cost + ' 积分', 'success');
+  } catch (e) {
+    resultEl.innerHTML = `<div style="text-align:center;color:#ef4444;padding:40px;"><p>❌ 生成失败：${escHtml(e.message)}</p></div>`;
+    showToast('生成失败：' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🎨 开始生成';
+  }
+}
+
+function downloadImage() {
+  const img = document.querySelector('#img-result img');
+  if (!img) return;
+  const a = document.createElement('a');
+  a.href = img.src;
+  a.download = 'aihub-image-' + Date.now() + '.png';
+  a.click();
+}
+
 // ===== 页面路由 =====
 function showPage(page) {
   state.currentPage = page;
@@ -609,7 +748,7 @@ function showPage(page) {
     case 'chat': main.innerHTML = renderChat(); selectModel('deepseek-chat'); break;
     case 'credits': main.innerHTML = renderCredits(); loadTransactions(); break;
     case 'tasks': main.innerHTML = renderTasks(); break;
-    case 'image': main.innerHTML = '<div class="coming-soon"><h2>🎨 AI 绘画</h2><p>接入文生图 API 后开放，当前积分定价：标准 8积分/张，高清 25积分/张</p></div>'; break;
+    case 'image': main.innerHTML = renderImage(); break;
     case 'video': main.innerHTML = '<div class="coming-soon"><h2>🎬 AI 视频</h2><p>接入视频生成 API 后开放，当前积分定价：80积分/条</p></div>'; break;
     case 'doc': main.innerHTML = '<div class="coming-soon"><h2>📄 文档解析</h2><p>接入文档解析服务后开放，当前积分定价：15积分/份</p></div>'; break;
     case 'profile': main.innerHTML = renderProfile(); break;
