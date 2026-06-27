@@ -1,8 +1,8 @@
 /**
- * AIHub 前端 - 真实后端对接版
+ * AIHub 前端 - 白色简约主题 + 消息操作
  * 对接 server/src/index.js 提供的 API
  */
-const API_BASE = 'https://aihub-backend-app-production.up.railway.app';  // Railway 后端地址
+const API_BASE = 'https://aihub-backend-app-production.up.railway.app';
 
 // ===== 全局状态 =====
 const state = {
@@ -10,6 +10,8 @@ const state = {
   user: null,
   currentPage: 'dashboard',
   config: { mockMode: true, providers: {} },
+  currentModel: 'deepseek-chat',
+  chatHistory: [],
 };
 
 // 加载系统配置
@@ -87,7 +89,7 @@ async function login(phone, password) {
     localStorage.setItem('aihub_user', JSON.stringify(data.user));
     showApp();
   } catch (e) {
-    alert('登录失败：' + e.message);
+    showToast('登录失败：' + e.message, 'error');
   }
 }
 
@@ -100,7 +102,7 @@ async function register(phone, password, nickname) {
     localStorage.setItem('aihub_user', JSON.stringify(data.user));
     showApp();
   } catch (e) {
-    alert('注册失败：' + e.message);
+    showToast('注册失败：' + e.message, 'error');
   }
 }
 
@@ -126,6 +128,22 @@ async function restoreSession() {
   }
 }
 
+// ===== Toast 提示 =====
+function showToast(msg, type = 'info') {
+  let toast = document.getElementById('global-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'global-toast';
+    toast.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:10px;font-size:13px;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none;color:#fff;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.background = type === 'error' ? '#ef4444' : type === 'success' ? '#22c55e' : '#333';
+  toast.style.opacity = '1';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 2200);
+}
+
 // ===== 页面渲染 =====
 
 function showLogin() {
@@ -138,8 +156,8 @@ function showLogin() {
           <p>一站式 AI 能力聚合平台</p>
         </div>
         <div class="login-tabs">
-          <button class="tab-btn active" onclick="switchLoginTab('login')">登录</button>
-          <button class="tab-btn" onclick="switchLoginTab('register')">注册</button>
+          <button class="tab-btn active" onclick="switchLoginTab('login',this)">登录</button>
+          <button class="tab-btn" onclick="switchLoginTab('register',this)">注册</button>
         </div>
         <div id="login-form" class="login-form">
           <div class="form-group">
@@ -173,9 +191,9 @@ function showLogin() {
   `;
 }
 
-function switchLoginTab(tab) {
+function switchLoginTab(tab, btn) {
   document.querySelectorAll('.login-tabs .tab-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  btn.classList.add('active');
   document.getElementById('login-form').style.display = tab === 'login' ? '' : 'none';
   document.getElementById('register-form').style.display = tab === 'register' ? '' : 'none';
 }
@@ -183,7 +201,7 @@ function switchLoginTab(tab) {
 function doLogin() {
   const phone = document.getElementById('login-phone').value.trim();
   const pwd = document.getElementById('login-pwd').value;
-  if (!phone || !pwd) return alert('请填写完整');
+  if (!phone || !pwd) return showToast('请填写完整', 'error');
   login(phone, pwd);
 }
 
@@ -191,8 +209,8 @@ function doRegister() {
   const phone = document.getElementById('reg-phone').value.trim();
   const pwd = document.getElementById('reg-pwd').value;
   const nick = document.getElementById('reg-nick').value.trim();
-  if (!phone || !pwd) return alert('请填写完整');
-  if (pwd.length < 6) return alert('密码至少6位');
+  if (!phone || !pwd) return showToast('请填写完整', 'error');
+  if (pwd.length < 6) return showToast('密码至少6位', 'error');
   register(phone, pwd, nick);
 }
 
@@ -209,8 +227,8 @@ function showApp() {
           <span class="credit-icon">💰</span>
           <span id="header-credits">${user.credits}</span> 积分
         </div>
-        <div class="user-menu" onclick="toggleUserMenu()">
-          <span class="avatar-small">${user.nickname ? user.nickname[0] : 'U'}</span>
+        <div class="user-menu" onclick="toggleUserMenu(event)">
+          <span class="avatar-small">${(user.nickname ? user.nickname[0] : 'U').toUpperCase()}</span>
           <span>${user.nickname || '用户'}</span>
           <div id="user-dropdown" class="dropdown-menu" style="display:none">
             <div class="dropdown-item" onclick="showPage('profile')">个人中心</div>
@@ -247,15 +265,14 @@ function showApp() {
 // ===== 各页面渲染 =====
 
 function renderDashboard() {
-  const mockWarn = state.config.mockMode
-    ? '<div class="mock-warning">⚠️ 当前为模拟模式，AI 对话返回模拟内容。请在 <code>server/.env</code> 中配置 API Key 以接入真实大模型。</div>'
-    : '<div class="real-mode-ok">✅ 已接入真实大模型 API，可正常使用。</div>';
   return `
-    ${mockWarn}
+    ${state.config.mockMode
+      ? '<div class="mock-warning">⚠️ 当前为模拟模式，请配置 API Key 以接入真实大模型。</div>'
+      : '<div class="real-mode-ok">✅ 已接入真实大模型 API，可正常使用。</div>'}
     <div class="page-dashboard">
       <div class="welcome-banner">
         <h2>欢迎回来，${state.user.nickname || '用户'}！</h2>
-        <p>今日可用积分：<strong id="dash-credits">${state.user.credits}</strong> ｜ 剩余对话次数约 ${Math.floor(state.user.credits / 2)} 次</p>
+        <p>今日可用积分：<strong id="dash-credits">${state.user.credits}</strong> ｜ 剩余对话约 ${Math.floor(state.user.credits / 2)} 次</p>
       </div>
       <div class="stats-row">
         <div class="stat-card"><div class="stat-value">${state.user.credits}</div><div class="stat-label">可用积分</div></div>
@@ -289,6 +306,7 @@ function renderChat() {
     { id: 'qwen-max', name: '通义千问 Max', tier: '旗舰', rate: 10 },
     { id: 'deepseek-reasoner', name: 'DeepSeek R1', tier: '推理', rate: 18 },
   ];
+  state.currentModel = 'deepseek-chat';
   return `
     <div class="page-chat">
       <div class="chat-layout">
@@ -310,12 +328,12 @@ function renderChat() {
           <div class="chat-messages" id="chat-messages">
             <div class="welcome-msg">
               <p>👋 你好！我是 AIHub 助手。</p>
-              <p>请选择左侧模型，然后开始对话。当前为模拟模式，配置 API Key 后可使用真实模型。</p>
+              <p>请选择左侧模型，然后开始对话。</p>
             </div>
           </div>
           <div class="chat-input-area">
             <div class="input-row">
-              <textarea id="chat-input" placeholder="输入消息，Shift+Enter 换行..." rows="2"></textarea>
+              <textarea id="chat-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行..." rows="1" oninput="autoResize(this)" onkeydown="handleChatKeydown(event)"></textarea>
               <button class="send-btn" id="send-btn" onclick="sendMessage()">发送</button>
             </div>
             <div class="input-hint">
@@ -328,15 +346,45 @@ function renderChat() {
   `;
 }
 
-let currentModel = 'deepseek-chat';
-let chatHistory = [];
+// Enter 发送，Shift+Enter 换行
+function handleChatKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+// 输入框自动增高
+function autoResize(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+}
 
 function selectModel(modelId) {
-  currentModel = modelId;
+  state.currentModel = modelId;
   document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
   const el = document.getElementById('model-' + modelId);
   if (el) el.classList.add('active');
-  document.getElementById('est-cost').textContent = modelId.includes('reasoner') || modelId.includes('o1') ? 18 : modelId.includes('4o') && !modelId.includes('mini') ? 12 : modelId.includes('plus') || modelId.includes('coder') ? 4 : 2;
+  const rate = modelId.includes('reasoner') ? 18 : modelId.includes('4o') && !modelId.includes('mini') ? 12 : modelId.includes('plus') || modelId.includes('coder') ? 4 : 2;
+  document.getElementById('est-cost').textContent = rate;
+}
+
+// ===== 消息渲染（含操作按钮）=====
+
+function renderUserMsg(msg) {
+  return `<div class="msg-user" data-msg="${escAttr(msg)}">
+    <div class="msg-bubble">${escHtml(msg)}</div>
+  </div>`;
+}
+
+function renderAssistantMsg(content, msgId) {
+  return `<div class="msg-assistant" id="${msgId}">
+    <div class="msg-bubble">${escHtml(content)}</div>
+    <div class="msg-actions">
+      <button class="msg-action-btn" title="复制" onclick="copyMessage('${msgId}')">📋</button>
+      <button class="msg-action-btn" title="引用" onclick="quoteMessage('${msgId}')">💬</button>
+    </div>
+  </div>`;
 }
 
 async function sendMessage() {
@@ -344,10 +392,17 @@ async function sendMessage() {
   const msg = input.value.trim();
   if (!msg) return;
   input.value = '';
+  input.style.height = 'auto';
 
   const messagesEl = document.getElementById('chat-messages');
+  // 移除欢迎消息
+  const welcome = messagesEl.querySelector('.welcome-msg');
+  if (welcome) welcome.remove();
+
   // 用户消息
-  messagesEl.innerHTML += `<div class="msg-user"><div class="msg-bubble">${escHtml(msg)}</div></div>`;
+  messagesEl.innerHTML += renderUserMsg(msg);
+  state.chatHistory.push({ role: 'user', content: msg });
+
   // 助手消息（流式占位）
   const assistantId = 'msg-' + Date.now();
   messagesEl.innerHTML += `<div class="msg-assistant" id="${assistantId}"><div class="msg-bubble"><span class="streaming-cursor">▌</span></div></div>`;
@@ -358,18 +413,26 @@ async function sendMessage() {
 
   try {
     document.getElementById('send-btn').disabled = true;
-    await api.streamChat(msg, currentModel,
+    await api.streamChat(msg, state.currentModel,
       (token) => {
         fullContent += token;
         bubble.innerHTML = escHtml(fullContent) + '<span class="streaming-cursor">▌</span>';
         messagesEl.scrollTop = messagesEl.scrollHeight;
       },
       (content, cost, balance) => {
+        // 流式结束：渲染最终内容 + 操作按钮
         bubble.innerHTML = escHtml(content);
+        const msgDiv = document.getElementById(assistantId);
+        msgDiv.innerHTML += `<div class="msg-actions">
+          <button class="msg-action-btn" title="复制" onclick="copyMessage('${assistantId}')">📋</button>
+          <button class="msg-action-btn" title="引用" onclick="quoteMessage('${assistantId}')">💬</button>
+        </div>`;
+        state.chatHistory.push({ role: 'assistant', content });
         document.getElementById('user-credits').textContent = balance;
         document.getElementById('header-credits').textContent = balance;
         state.user.credits = balance;
         document.getElementById('send-btn').disabled = false;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
       },
       (error) => {
         bubble.innerHTML = '<span class="error-msg">错误：' + escHtml(error) + '</span>';
@@ -382,6 +445,38 @@ async function sendMessage() {
   }
 }
 
+// 复制消息
+function copyMessage(msgId) {
+  const bubble = document.querySelector('#' + msgId + ' .msg-bubble');
+  if (!bubble) return;
+  const text = bubble.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('已复制到剪贴板', 'success');
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('已复制', 'success');
+  });
+}
+
+// 引用消息（插入到输入框）
+function quoteMessage(msgId) {
+  const bubble = document.querySelector('#' + msgId + ' .msg-bubble');
+  if (!bubble) return;
+  const text = bubble.innerText;
+  const input = document.getElementById('chat-input');
+  const quoted = text.split('\n').map(l => '> ' + l).join('\n') + '\n\n';
+  input.value = quoted + input.value;
+  input.focus();
+  autoResize(input);
+  showToast('已引用到输入框', 'success');
+}
+
 function renderCredits() {
   return `
     <div class="page-credits">
@@ -389,7 +484,7 @@ function renderCredits() {
         <div class="credits-balance-card">
           <h3>可用积分</h3>
           <div class="balance-num" id="credits-balance">${state.user.credits}</div>
-          <p>约等于 ¥${state.user.credits ? (state.user.credits * 0.085).toFixed(1) : '0'} 元</p>
+          <p>约等于 ¥${(state.user.credits * 0.085).toFixed(1)} 元</p>
         </div>
       </div>
       <div class="recharge-section">
@@ -434,13 +529,13 @@ async function buyPackage(pkgId) {
   if (!confirm('确认支付？当前为模拟支付，点击即到账。')) return;
   try {
     const data = await api.post('/api/payment/create-order', { packageId: pkgId });
-    alert('支付成功！积分已到账。余额：' + data.balance);
+    showToast('支付成功！积分已到账。余额：' + data.balance, 'success');
     state.user.credits = data.balance;
     document.getElementById('credits-balance').textContent = data.balance;
     document.getElementById('header-credits').textContent = data.balance;
     loadTransactions();
   } catch (e) {
-    alert('支付失败：' + e.message);
+    showToast('支付失败：' + e.message, 'error');
   }
 }
 
@@ -474,7 +569,7 @@ function renderTasks() {
         <button class="btn-small" id="checkin-btn">签到</button>
       </div>
       <div class="task-card">
-        <div class="task-icon">👫</div>
+        <div class="task-icon">👥</div>
         <div class="task-info">
           <h4>邀请好友</h4>
           <p>每邀请 1 位好友注册，双方各得 50 积分</p>
@@ -488,20 +583,20 @@ function renderTasks() {
 async function doCheckIn() {
   try {
     const data = await api.post('/api/user/check-in');
-    alert('签到成功！获得 ' + data.creditsEarned + ' 积分\n连续签到：' + data.consecutiveDays + ' 天');
+    showToast(`签到成功！获得 ${data.creditsEarned} 积分，连续 ${data.consecutiveDays} 天`, 'success');
     state.user.credits = data.balance;
     document.getElementById('header-credits').textContent = data.balance;
     const btn = document.getElementById('checkin-btn');
-    if (btn) btn.disabled = true, btn.textContent = '已签到';
+    if (btn) { btn.disabled = true; btn.textContent = '已签到'; }
   } catch (e) {
-    alert(e.message);
+    showToast(e.message, 'error');
   }
 }
 
 function copyInviteLink() {
   const link = window.location.origin + '/#register';
   navigator.clipboard.writeText(link);
-  alert('邀请链接已复制：' + link);
+  showToast('邀请链接已复制', 'success');
 }
 
 // ===== 页面路由 =====
@@ -534,7 +629,7 @@ function renderProfile() {
     <div class="page-profile">
       <h2>个人中心</h2>
       <div class="profile-card">
-        <div class="profile-avatar">${u.nickname ? u.nickname[0] : 'U'}</div>
+        <div class="profile-avatar">${(u.nickname ? u.nickname[0] : 'U').toUpperCase()}</div>
         <h3>${u.nickname || '用户'}</h3>
         <p>手机号：${u.phone || '未绑定'}</p>
         <p>积分余额：<strong>${u.credits}</strong></p>
@@ -573,10 +668,19 @@ function escHtml(s) {
   return d.innerHTML.replace(/\n/g, '<br>');
 }
 
-function toggleUserMenu() {
-  const dd = document.getElementById('user-dropdown');
-  if (dd) dd.style.display = dd.style.display === '' ? 'none' : '';
+function escAttr(s) {
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+function toggleUserMenu(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('user-dropdown');
+  if (dd) dd.style.display = dd.style.display === 'none' ? '' : 'none';
+}
+document.addEventListener('click', () => {
+  const dd = document.getElementById('user-dropdown');
+  if (dd) dd.style.display = 'none';
+});
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
