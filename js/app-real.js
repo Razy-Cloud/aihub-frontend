@@ -1,0 +1,584 @@
+/**
+ * AIHub 前端 - 真实后端对接版
+ * 对接 server/src/index.js 提供的 API
+ */
+const API_BASE = 'https://aihub-backend-app-production.up.railway.app';  // Railway 后端地址
+
+// ===== 全局状态 =====
+const state = {
+  token: localStorage.getItem('aihub_token') || '',
+  user: null,
+  currentPage: 'dashboard',
+  config: { mockMode: true, providers: {} },
+};
+
+// 加载系统配置
+async function loadConfig() {
+  try {
+    const data = await api.get('/api/config/status');
+    state.config = data;
+  } catch (e) { state.config = { mockMode: true }; }
+}
+
+// ===== API 客户端 =====
+const api = {
+  async request(path, opts = {}) {
+    const url = API_BASE + path;
+    const headers = { 'Content-Type': 'application/json' };
+    if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
+    const resp = await fetch(url, {
+      method: opts.method || 'GET',
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '请求失败');
+    return data;
+  },
+  async get(path) { return this.request(path); },
+  async post(path, body) { return this.request(path, { method: 'POST', body }); },
+
+  // 流式请求（SSE）
+  async streamChat(message, model, onToken, onDone, onError) {
+    const url = API_BASE + '/api/chat/stream';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.token },
+      body: JSON.stringify({ message, model: model || 'deepseek-chat' }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      onError(err.error || '请求失败');
+      return;
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+    let cost = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const d = JSON.parse(line.slice(6));
+            if (d.type === 'token') { fullContent += d.content; onToken(d.content); }
+            if (d.type === 'done') { cost = d.cost || 0; onDone(fullContent, cost, d.balance); }
+            if (d.type === 'error') { onError(d.error); return; }
+          } catch (e) {}
+        }
+      }
+    } catch (e) { onError(e.message); }
+  },
+};
+
+// ===== 认证 =====
+async function login(phone, password) {
+  try {
+    const data = await api.post('/api/auth/login', { phone, password });
+    state.token = data.token;
+    state.user = data.user;
+    localStorage.setItem('aihub_token', data.token);
+    localStorage.setItem('aihub_user', JSON.stringify(data.user));
+    showApp();
+  } catch (e) {
+    alert('登录失败：' + e.message);
+  }
+}
+
+async function register(phone, password, nickname) {
+  try {
+    const data = await api.post('/api/auth/register', { phone, password, nickname });
+    state.token = data.token;
+    state.user = data.user;
+    localStorage.setItem('aihub_token', data.token);
+    localStorage.setItem('aihub_user', JSON.stringify(data.user));
+    showApp();
+  } catch (e) {
+    alert('注册失败：' + e.message);
+  }
+}
+
+function logout() {
+  state.token = '';
+  state.user = null;
+  localStorage.removeItem('aihub_token');
+  localStorage.removeItem('aihub_user');
+  showLogin();
+}
+
+// 恢复会话
+async function restoreSession() {
+  await loadConfig();
+  if (!state.token) return showLogin();
+  try {
+    const data = await api.get('/api/auth/me');
+    state.user = data.user;
+    showApp();
+  } catch (e) {
+    localStorage.removeItem('aihub_token');
+    showLogin();
+  }
+}
+
+// ===== 页面渲染 =====
+
+function showLogin() {
+  document.getElementById('app').innerHTML = `
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-logo">
+          <span class="logo-icon">✦</span>
+          <h1>AIHub</h1>
+          <p>一站式 AI 能力聚合平台</p>
+        </div>
+        <div class="login-tabs">
+          <button class="tab-btn active" onclick="switchLoginTab('login')">登录</button>
+          <button class="tab-btn" onclick="switchLoginTab('register')">注册</button>
+        </div>
+        <div id="login-form" class="login-form">
+          <div class="form-group">
+            <label>手机号</label>
+            <input type="tel" id="login-phone" placeholder="请输入手机号" value="13800000000">
+          </div>
+          <div class="form-group">
+            <label>密码</label>
+            <input type="password" id="login-pwd" placeholder="请输入密码" value="admin123456">
+          </div>
+          <button class="btn-primary" onclick="doLogin()">登 录</button>
+          <div class="login-hint">管理员账号已预填，也可注册新账号（送50积分）</div>
+        </div>
+        <div id="register-form" class="login-form" style="display:none">
+          <div class="form-group">
+            <label>手机号</label>
+            <input type="tel" id="reg-phone" placeholder="请输入手机号">
+          </div>
+          <div class="form-group">
+            <label>昵称</label>
+            <input type="text" id="reg-nick" placeholder="请输入昵称">
+          </div>
+          <div class="form-group">
+            <label>密码</label>
+            <input type="password" id="reg-pwd" placeholder="请设置密码（≥6位）">
+          </div>
+          <button class="btn-primary" onclick="doRegister()">注 册</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function switchLoginTab(tab) {
+  document.querySelectorAll('.login-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('login-form').style.display = tab === 'login' ? '' : 'none';
+  document.getElementById('register-form').style.display = tab === 'register' ? '' : 'none';
+}
+
+function doLogin() {
+  const phone = document.getElementById('login-phone').value.trim();
+  const pwd = document.getElementById('login-pwd').value;
+  if (!phone || !pwd) return alert('请填写完整');
+  login(phone, pwd);
+}
+
+function doRegister() {
+  const phone = document.getElementById('reg-phone').value.trim();
+  const pwd = document.getElementById('reg-pwd').value;
+  const nick = document.getElementById('reg-nick').value.trim();
+  if (!phone || !pwd) return alert('请填写完整');
+  if (pwd.length < 6) return alert('密码至少6位');
+  register(phone, pwd, nick);
+}
+
+function showApp() {
+  const user = state.user;
+  document.getElementById('app').innerHTML = `
+    <!-- 顶栏 -->
+    <header class="top-bar">
+      <div class="top-left">
+        <span class="logo-small">✦ AIHub</span>
+      </div>
+      <div class="top-right">
+        <div class="credit-badge" onclick="showPage('credits')">
+          <span class="credit-icon">💰</span>
+          <span id="header-credits">${user.credits}</span> 积分
+        </div>
+        <div class="user-menu" onclick="toggleUserMenu()">
+          <span class="avatar-small">${user.nickname ? user.nickname[0] : 'U'}</span>
+          <span>${user.nickname || '用户'}</span>
+          <div id="user-dropdown" class="dropdown-menu" style="display:none">
+            <div class="dropdown-item" onclick="showPage('profile')">个人中心</div>
+            <div class="dropdown-item" onclick="showPage('credits')">积分中心</div>
+            ${user.role === 'admin' ? '<div class="dropdown-item" onclick="showPage(\'admin\')">管理后台</div>' : ''}
+            <div class="dropdown-item danger" onclick="logout()">退出登录</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-item active" data-page="dashboard" onclick="showPage('dashboard');return false;">🏠 工作台</a>
+        <a href="#" class="nav-item" data-page="chat" onclick="showPage('chat');return false;">💬 AI 对话</a>
+        <a href="#" class="nav-item" data-page="image" onclick="showPage('image');return false;">🎨 AI 绘画</a>
+        <a href="#" class="nav-item" data-page="video" onclick="showPage('video');return false;">🎬 AI 视频</a>
+        <a href="#" class="nav-item" data-page="doc" onclick="showPage('doc');return false;">📄 文档解析</a>
+        <a href="#" class="nav-item" data-page="credits" onclick="showPage('credits');return false;">💰 积分中心</a>
+        <a href="#" class="nav-item" data-page="tasks" onclick="showPage('tasks');return false;">🎁 任务中心</a>
+        ${user.role === 'admin' ? '<a href="#" class="nav-item" data-page="admin" onclick="showPage(\'admin\');return false;">⚙️ 管理后台</a>' : ''}
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content" id="main-content">
+      ${renderDashboard()}
+    </main>
+  `;
+  updateNavActive('dashboard');
+}
+
+// ===== 各页面渲染 =====
+
+function renderDashboard() {
+  const mockWarn = state.config.mockMode
+    ? '<div class="mock-warning">⚠️ 当前为模拟模式，AI 对话返回模拟内容。请在 <code>server/.env</code> 中配置 API Key 以接入真实大模型。</div>'
+    : '<div class="real-mode-ok">✅ 已接入真实大模型 API，可正常使用。</div>';
+  return `
+    ${mockWarn}
+    <div class="page-dashboard">
+      <div class="welcome-banner">
+        <h2>欢迎回来，${state.user.nickname || '用户'}！</h2>
+        <p>今日可用积分：<strong id="dash-credits">${state.user.credits}</strong> ｜ 剩余对话次数约 ${Math.floor(state.user.credits / 2)} 次</p>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-value">${state.user.credits}</div><div class="stat-label">可用积分</div></div>
+        <div class="stat-card"><div class="stat-value">2积分/次</div><div class="stat-label">对话消耗</div></div>
+        <div class="stat-card"><div class="stat-value">10+</div><div class="stat-label">AI模型</div></div>
+        <div class="stat-card"><div class="stat-value">文/图/视频</div><div class="stat-label">全品类工具</div></div>
+      </div>
+      <div class="quick-tools">
+        <h3>快捷工具</h3>
+        <div class="tools-grid">
+          <div class="tool-card" onclick="showPage('chat')"><span>💬</span><p>AI 对话</p><small>支持 DeepSeek/Qwen/GPT</small></div>
+          <div class="tool-card" onclick="showPage('image')"><span>🎨</span><p>AI 绘画</p><small>配置后开放</small></div>
+          <div class="tool-card" onclick="showPage('video')"><span>🎬</span><p>AI 视频</p><small>配置后开放</small></div>
+          <div class="tool-card" onclick="showPage('doc')"><span>📄</span><p>文档解析</p><small>配置后开放</small></div>
+          <div class="tool-card" onclick="showPage('credits')"><span>💰</span><p>充值积分</p><small>模拟支付已开启</small></div>
+          <div class="tool-card" onclick="showPage('tasks')"><span>🎁</span><p>签到领积分</p><small>每日 +5 积分</small></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderChat() {
+  const models = [
+    { id: 'deepseek-chat', name: 'DeepSeek V3', tier: '入门', rate: 2 },
+    { id: 'qwen-turbo', name: '通义千问 Turbo', tier: '入门', rate: 2 },
+    { id: 'deepseek-coder', name: 'DeepSeek Coder', tier: '进阶', rate: 4 },
+    { id: 'qwen-plus', name: '通义千问 Plus', tier: '进阶', rate: 4 },
+    { id: 'gpt-4o-mini', name: 'GPT-4o mini', tier: '进阶', rate: 5 },
+    { id: 'gpt-4o', name: 'GPT-4o', tier: '旗舰', rate: 12 },
+    { id: 'qwen-max', name: '通义千问 Max', tier: '旗舰', rate: 10 },
+    { id: 'deepseek-reasoner', name: 'DeepSeek R1', tier: '推理', rate: 18 },
+  ];
+  return `
+    <div class="page-chat">
+      <div class="chat-layout">
+        <!-- 左侧模型列表 -->
+        <div class="chat-sidebar">
+          <h4>选择模型</h4>
+          ${models.map(m => `
+            <div class="model-item ${m.tier === '推理' ? 'reasoning' : ''}" onclick="selectModel('${m.id}')" id="model-${m.id}">
+              <div class="model-name">${m.name}</div>
+              <div class="model-tier">${m.tier} · ${m.rate}积分/1k tokens</div>
+            </div>
+          `).join('')}
+          <div class="chat-tools">
+            <label><input type="checkbox" id="web-search"> 联网搜索 (+2积分)</label>
+          </div>
+        </div>
+        <!-- 右侧对话区 -->
+        <div class="chat-main">
+          <div class="chat-messages" id="chat-messages">
+            <div class="welcome-msg">
+              <p>👋 你好！我是 AIHub 助手。</p>
+              <p>请选择左侧模型，然后开始对话。当前为模拟模式，配置 API Key 后可使用真实模型。</p>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <div class="input-row">
+              <textarea id="chat-input" placeholder="输入消息，Shift+Enter 换行..." rows="2"></textarea>
+              <button class="send-btn" id="send-btn" onclick="sendMessage()">发送</button>
+            </div>
+            <div class="input-hint">
+              消耗预估：<span id="est-cost">2</span> 积分 ｜ 余额：<span id="user-credits">${state.user.credits}</span> 积分
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+let currentModel = 'deepseek-chat';
+let chatHistory = [];
+
+function selectModel(modelId) {
+  currentModel = modelId;
+  document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('model-' + modelId);
+  if (el) el.classList.add('active');
+  document.getElementById('est-cost').textContent = modelId.includes('reasoner') || modelId.includes('o1') ? 18 : modelId.includes('4o') && !modelId.includes('mini') ? 12 : modelId.includes('plus') || modelId.includes('coder') ? 4 : 2;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const messagesEl = document.getElementById('chat-messages');
+  // 用户消息
+  messagesEl.innerHTML += `<div class="msg-user"><div class="msg-bubble">${escHtml(msg)}</div></div>`;
+  // 助手消息（流式占位）
+  const assistantId = 'msg-' + Date.now();
+  messagesEl.innerHTML += `<div class="msg-assistant" id="${assistantId}"><div class="msg-bubble"><span class="streaming-cursor">▌</span></div></div>`;
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  const bubble = document.querySelector('#' + assistantId + ' .msg-bubble');
+  let fullContent = '';
+
+  try {
+    document.getElementById('send-btn').disabled = true;
+    await api.streamChat(msg, currentModel,
+      (token) => {
+        fullContent += token;
+        bubble.innerHTML = escHtml(fullContent) + '<span class="streaming-cursor">▌</span>';
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      },
+      (content, cost, balance) => {
+        bubble.innerHTML = escHtml(content);
+        document.getElementById('user-credits').textContent = balance;
+        document.getElementById('header-credits').textContent = balance;
+        state.user.credits = balance;
+        document.getElementById('send-btn').disabled = false;
+      },
+      (error) => {
+        bubble.innerHTML = '<span class="error-msg">错误：' + escHtml(error) + '</span>';
+        document.getElementById('send-btn').disabled = false;
+      }
+    );
+  } catch (e) {
+    bubble.innerHTML = '<span class="error-msg">发送失败：' + escHtml(e.message) + '</span>';
+    document.getElementById('send-btn').disabled = false;
+  }
+}
+
+function renderCredits() {
+  return `
+    <div class="page-credits">
+      <div class="credits-header">
+        <div class="credits-balance-card">
+          <h3>可用积分</h3>
+          <div class="balance-num" id="credits-balance">${state.user.credits}</div>
+          <p>约等于 ¥${state.user.credits ? (state.user.credits * 0.085).toFixed(1) : '0'} 元</p>
+        </div>
+      </div>
+      <div class="recharge-section">
+        <h3>充值积分包</h3>
+        <div class="packages-grid" id="packages-grid">
+          <div class="package-card" onclick="buyPackage('pkg_9')">
+            <div class="pkg-price">¥9.9</div>
+            <div class="pkg-credits">100 积分</div>
+            <div class="pkg-name">体验档</div>
+            <div class="pkg-per">¥0.099/积分</div>
+          </div>
+          <div class="package-card recommended" onclick="buyPackage('pkg_29')">
+            <div class="pkg-badge">推荐</div>
+            <div class="pkg-price">¥29.9</div>
+            <div class="pkg-credits">350 积分</div>
+            <div class="pkg-name">入门档</div>
+            <div class="pkg-per">¥0.085/积分</div>
+          </div>
+          <div class="package-card" onclick="buyPackage('pkg_99')">
+            <div class="pkg-price">¥99</div>
+            <div class="pkg-credits">1200 积分</div>
+            <div class="pkg-name">常用档</div>
+            <div class="pkg-per">¥0.082/积分</div>
+          </div>
+          <div class="package-card" onclick="buyPackage('pkg_299')">
+            <div class="pkg-price">¥299</div>
+            <div class="pkg-credits">4000 积分</div>
+            <div class="pkg-name">重度档</div>
+            <div class="pkg-per">¥0.075/积分</div>
+          </div>
+        </div>
+      </div>
+      <div class="transactions-section">
+        <h3>积分明细</h3>
+        <div id="transactions-list">加载中...</div>
+      </div>
+    </div>
+  `;
+}
+
+async function buyPackage(pkgId) {
+  if (!confirm('确认支付？当前为模拟支付，点击即到账。')) return;
+  try {
+    const data = await api.post('/api/payment/create-order', { packageId: pkgId });
+    alert('支付成功！积分已到账。余额：' + data.balance);
+    state.user.credits = data.balance;
+    document.getElementById('credits-balance').textContent = data.balance;
+    document.getElementById('header-credits').textContent = data.balance;
+    loadTransactions();
+  } catch (e) {
+    alert('支付失败：' + e.message);
+  }
+}
+
+async function loadTransactions() {
+  try {
+    const data = await api.get('/api/user/transactions');
+    const list = document.getElementById('transactions-list');
+    if (!list) return;
+    list.innerHTML = `<table class="tx-table">
+      <tr><th>时间</th><th>类型</th><th>变动</th><th>说明</th></tr>
+      ${data.items.map(t => `<tr>
+        <td>${t.created_at}</td>
+        <td>${{recharge:'充值',consume:'消费',refund:'退款',gift:'赠送',sign_in:'签到'}[t.type]||t.type}</td>
+        <td class="${t.amount > 0 ? 'tx-plus' : 'tx-minus'}">${t.amount > 0 ? '+' : ''}${t.amount}</td>
+        <td>${t.description || ''}</td>
+      </tr>`).join('')}
+    </table>`;
+  } catch (e) { console.error(e); }
+}
+
+function renderTasks() {
+  return `
+    <div class="page-tasks">
+      <h2>任务中心</h2>
+      <div class="task-card" onclick="doCheckIn()">
+        <div class="task-icon">📅</div>
+        <div class="task-info">
+          <h4>每日签到</h4>
+          <p>签到领取 5 积分，连续签到奖励递增</p>
+        </div>
+        <button class="btn-small" id="checkin-btn">签到</button>
+      </div>
+      <div class="task-card">
+        <div class="task-icon">👫</div>
+        <div class="task-info">
+          <h4>邀请好友</h4>
+          <p>每邀请 1 位好友注册，双方各得 50 积分</p>
+        </div>
+        <button class="btn-small" onclick="copyInviteLink()">复制链接</button>
+      </div>
+    </div>
+  `;
+}
+
+async function doCheckIn() {
+  try {
+    const data = await api.post('/api/user/check-in');
+    alert('签到成功！获得 ' + data.creditsEarned + ' 积分\n连续签到：' + data.consecutiveDays + ' 天');
+    state.user.credits = data.balance;
+    document.getElementById('header-credits').textContent = data.balance;
+    const btn = document.getElementById('checkin-btn');
+    if (btn) btn.disabled = true, btn.textContent = '已签到';
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function copyInviteLink() {
+  const link = window.location.origin + '/#register';
+  navigator.clipboard.writeText(link);
+  alert('邀请链接已复制：' + link);
+}
+
+// ===== 页面路由 =====
+function showPage(page) {
+  state.currentPage = page;
+  updateNavActive(page);
+  const main = document.getElementById('main-content');
+  switch (page) {
+    case 'dashboard': main.innerHTML = renderDashboard(); break;
+    case 'chat': main.innerHTML = renderChat(); selectModel('deepseek-chat'); break;
+    case 'credits': main.innerHTML = renderCredits(); loadTransactions(); break;
+    case 'tasks': main.innerHTML = renderTasks(); break;
+    case 'image': main.innerHTML = '<div class="coming-soon"><h2>🎨 AI 绘画</h2><p>接入文生图 API 后开放，当前积分定价：标准 8积分/张，高清 25积分/张</p></div>'; break;
+    case 'video': main.innerHTML = '<div class="coming-soon"><h2>🎬 AI 视频</h2><p>接入视频生成 API 后开放，当前积分定价：80积分/条</p></div>'; break;
+    case 'doc': main.innerHTML = '<div class="coming-soon"><h2>📄 文档解析</h2><p>接入文档解析服务后开放，当前积分定价：15积分/份</p></div>'; break;
+    case 'profile': main.innerHTML = renderProfile(); break;
+    case 'admin': if (state.user.role === 'admin') main.innerHTML = renderAdmin(); else main.innerHTML = '<p>无权限</p>'; break;
+  }
+}
+
+function updateNavActive(page) {
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+}
+
+function renderProfile() {
+  const u = state.user;
+  return `
+    <div class="page-profile">
+      <h2>个人中心</h2>
+      <div class="profile-card">
+        <div class="profile-avatar">${u.nickname ? u.nickname[0] : 'U'}</div>
+        <h3>${u.nickname || '用户'}</h3>
+        <p>手机号：${u.phone || '未绑定'}</p>
+        <p>积分余额：<strong>${u.credits}</strong></p>
+        <p>注册时间：${u.created_at || '-'}</p>
+      </div>
+    </div>
+  `;
+}
+
+async function renderAdmin() {
+  try {
+    const data = await api.get('/api/admin/dashboard');
+    return `
+      <div class="page-admin">
+        <h2>管理后台</h2>
+        <div class="admin-stats">
+          <div class="stat-card"><div class="stat-value">${data.stats.totalUsers}</div><div>总用户</div></div>
+          <div class="stat-card"><div class="stat-value">${data.stats.totalOrders}</div><div>总订单</div></div>
+          <div class="stat-card"><div class="stat-value">¥${data.stats.totalRevenue}</div><div>总收入</div></div>
+        </div>
+        <div id="admin-users-section">
+          <h3>用户列表</h3>
+          <div id="admin-users">加载中...</div>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    return '<div class="page-admin"><p>加载失败：' + e.message + '</p></div>';
+  }
+}
+
+// ===== 工具函数 =====
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML.replace(/\n/g, '<br>');
+}
+
+function toggleUserMenu() {
+  const dd = document.getElementById('user-dropdown');
+  if (dd) dd.style.display = dd.style.display === '' ? 'none' : '';
+}
+
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+  restoreSession();
+});
