@@ -526,14 +526,14 @@ function renderCredits() {
 }
 
 async function buyPackage(pkgId) {
-  // 先获取系统状态，判断 Stripe 是否配置
+  // 先获取系统状态，判断 PayPal 是否配置
   try {
     const status = await api.get('/api/config/status');
-    const stripeReady = status.payment && status.payment.stripe;
+    const paypalReady = status.payment && status.payment.paypal;
 
-    if (!stripeReady) {
-      // Stripe 未配置，使用模拟支付
-      if (!confirm('Stripe 未配置，是否使用模拟支付（测试用）？')) return;
+    if (!paypalReady) {
+      // PayPal 未配置，使用模拟支付
+      if (!confirm('PayPal 未配置，是否使用模拟支付（测试用）？')) return;
       const data = await api.post('/api/payment/create-order', { packageId: pkgId });
       showToast('模拟支付成功！积分已到账。余额：' + data.balance, 'success');
       state.user.credits = data.balance;
@@ -543,16 +543,17 @@ async function buyPackage(pkgId) {
       return;
     }
 
-    // 使用 Stripe Checkout
+    // 使用 PayPal 支付
     const btn = document.querySelector(`#packages-grid .package-card[onclick*="${pkgId}"]`);
     if (btn) {
       btn.style.opacity = '0.6';
       btn.style.pointerEvents = 'none';
     }
-    showToast('正在跳转 Stripe 支付...', 'success');
-    const data = await api.post('/api/payment/create-stripe-session', { packageId: pkgId });
-    if (data.url) {
-      window.location.href = data.url;
+    showToast('正在创建 PayPal 订单...', 'success');
+    const data = await api.post('/api/payment/create-paypal-order', { packageId: pkgId });
+    if (data.approveUrl) {
+      // 跳转到 PayPal 批准页面
+      window.location.href = data.approveUrl;
     } else {
       showToast('创建支付失败', 'error');
     }
@@ -792,9 +793,22 @@ function checkPaymentReturn() {
   const hash = window.location.hash;
   if (hash.includes('paid=success')) {
     const orderMatch = hash.match(/order=([^&]+)/);
-    showToast('支付成功！积分将在稍后到账（Stripe 处理中）', 'success');
-    // 刷新余额
-    setTimeout(() => loadUserInfo(), 1500);
+    if (orderMatch) {
+      const orderId = orderMatch[1];
+      showToast('支付成功！正在确认订单...', 'success');
+      // 调用后端捕获 PayPal 订单
+      api.post('/api/payment/capture-paypal-order', { orderId })
+        .then(data => {
+          showToast('支付成功！积分已到账', 'success');
+          state.user.credits = data.balance;
+          if (document.getElementById('credits-balance')) document.getElementById('credits-balance').textContent = data.balance;
+          if (document.getElementById('header-credits')) document.getElementById('header-credits').textContent = data.balance;
+          loadTransactions();
+        })
+        .catch(e => {
+          showToast('订单确认失败：' + e.message, 'error');
+        });
+    }
     // 清理 URL 参数
     window.history.replaceState(null, '', window.location.pathname + window.location.hash.split('?')[0]);
   } else if (hash.includes('paid=cancel')) {
