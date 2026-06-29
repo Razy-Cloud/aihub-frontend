@@ -10,7 +10,8 @@ const state = {
   user: null,
   currentPage: 'dashboard',
   config: { mockMode: true, providers: {} },
-  currentModel: 'deepseek-chat',
+  models: [],  // 模型列表（从后端加载）
+  currentModel: '',
   chatHistory: [],
   selectedPackage: null,
 };
@@ -21,6 +22,27 @@ async function loadConfig() {
     const data = await api.get('/api/config/status');
     state.config = data;
   } catch (e) { state.config = { mockMode: true }; }
+}
+
+// 加载模型列表
+async function loadModels() {
+  try {
+    const data = await api.get('/api/models');
+    if (data.success && data.models && data.models.length > 0) {
+      state.models = data.models;
+      // 设置默认模型（优先选择第一个可用模型）
+      if (!state.currentModel || !state.models.find(m => m.id === state.currentModel)) {
+        state.currentModel = state.models[0].id;
+      }
+    }
+  } catch (e) {
+    console.error('[Models] 加载失败:', e);
+    // 降级：使用默认模型列表
+    state.models = [
+      { id: 'deepseek-chat', name: 'DeepSeek V3', tier: 'basic', tierLabel: '入门档', costPer1k: 2 },
+    ];
+    state.currentModel = 'deepseek-chat';
+  }
 }
 
 // ===== API 客户端 =====
@@ -215,7 +237,9 @@ function doRegister() {
   register(phone, pwd, nick);
 }
 
-function showApp() {
+async function showApp() {
+  // 加载模型列表
+  await loadModels();
   const user = state.user;
   document.getElementById('app').innerHTML = `
     <!-- 顶栏 -->
@@ -297,17 +321,13 @@ function renderDashboard() {
 }
 
 function renderChat() {
-  const models = [
-    { id: 'deepseek-chat', name: 'DeepSeek V3', tier: '入门', rate: 2 },
-    { id: 'qwen-turbo', name: '通义千问 Turbo', tier: '入门', rate: 2 },
-    { id: 'deepseek-coder', name: 'DeepSeek Coder', tier: '进阶', rate: 4 },
-    { id: 'qwen-plus', name: '通义千问 Plus', tier: '进阶', rate: 4 },
-    { id: 'gpt-4o-mini', name: 'GPT-4o mini', tier: '进阶', rate: 5 },
-    { id: 'gpt-4o', name: 'GPT-4o', tier: '旗舰', rate: 12 },
-    { id: 'qwen-max', name: '通义千问 Max', tier: '旗舰', rate: 10 },
-    { id: 'deepseek-reasoner', name: 'DeepSeek R1', tier: '推理', rate: 18 },
+  const models = state.models.length > 0 ? state.models : [
+    { id: 'deepseek-chat', name: 'DeepSeek V3', tierLabel: '入门档', costPer1k: 2 },
   ];
-  state.currentModel = 'deepseek-chat';
+  // 确保当前模型在列表中
+  if (!state.currentModel || !models.find(m => m.id === state.currentModel)) {
+    state.currentModel = models[0].id;
+  }
   return `
     <div class="page-chat">
       <div class="chat-layout">
@@ -315,9 +335,9 @@ function renderChat() {
         <div class="chat-sidebar">
           <h4>选择模型</h4>
           ${models.map(m => `
-            <div class="model-item ${m.tier === '推理' ? 'reasoning' : ''}" onclick="selectModel('${m.id}')" id="model-${m.id}">
+            <div class="model-item ${m.tier === 'reasoning' ? 'reasoning' : ''}" onclick="selectModel('${m.id}')" id="model-${m.id}">
               <div class="model-name">${m.name}</div>
-              <div class="model-tier">${m.tier} · ${m.rate}积分/1k tokens</div>
+              <div class="model-tier">${m.tierLabel} · ${m.costPer1k}积分/1k tokens</div>
             </div>
           `).join('')}
           <div class="chat-tools">
@@ -338,13 +358,19 @@ function renderChat() {
               <button class="send-btn" id="send-btn" onclick="sendMessage()">发送</button>
             </div>
             <div class="input-hint">
-              消耗预估：<span id="est-cost">2</span> 积分 ｜ 余额：<span id="user-credits">${state.user.credits}</span> 积分
+              消耗预估：<span id="est-cost">${getModelCost(state.currentModel)}</span> 积分 ｜ 余额：<span id="user-credits">${state.user.credits}</span> 积分
             </div>
           </div>
         </div>
       </div>
     </div>
   `;
+}
+
+// 获取模型积分消耗
+function getModelCost(modelId) {
+  const m = state.models.find(x => x.id === modelId);
+  return m ? m.costPer1k : 2;
 }
 
 // Enter 发送，Shift+Enter 换行
@@ -366,8 +392,9 @@ function selectModel(modelId) {
   document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
   const el = document.getElementById('model-' + modelId);
   if (el) el.classList.add('active');
-  const rate = modelId.includes('reasoner') ? 18 : modelId.includes('4o') && !modelId.includes('mini') ? 12 : modelId.includes('plus') || modelId.includes('coder') ? 4 : 2;
-  document.getElementById('est-cost').textContent = rate;
+  const cost = getModelCost(modelId);
+  const estEl = document.getElementById('est-cost');
+  if (estEl) estEl.textContent = cost;
 }
 
 // ===== 消息渲染（含操作按钮）=====
