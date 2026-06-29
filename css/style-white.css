@@ -336,9 +336,12 @@ body {
 .payment-method-btn.paypal:hover, .payment-method-btn.paypal.active { border-color: #0070ba; color: #0070ba; background: #f0f7ff; }
 .payment-method-btn.mock:hover, .payment-method-btn.mock.active { border-color: #999; color: #666; background: #f5f5f5; }
 .payment-method-container { min-height: 60px; }
-.wechat-qr-box, .alipay-redirect-box {
+.wechat-qr-box, .alipay-qr-box {
   text-align: center; padding: 20px; background: #fafbfe; border-radius: 12px; border: 1px solid #eee;
 }
-.wechat-qr-box img { max-width: 256px; width: 100%; border-radius: 8px; margin: 12px 0; }
-.wechat-qr-box p, .alipay-redirect-box p { color: #666; font-size: 13px; margin: 6px 0; }
+.wechat-qr-box img, .alipay-qr-box img { max-width: 256px; width: 100%; border-radius: 8px; margin: 12px 0; }
+.wechat-qr-box p, .alipay-qr-box p { color: #666; font-size: 13px; margin: 6px 0; }
+.alipay-qr-box h4 { color: #1677ff; margin: 0 0 8px; font-size: 16px; }
+.alipay-qr-price { color: #333; font-size: 24px; font-weight: 600; margin: 4px 0 12px; }
+.alipay-qr-tip { color: #1677ff !important; font-weight: 500; }
 

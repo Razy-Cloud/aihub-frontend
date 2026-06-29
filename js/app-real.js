@@ -707,23 +707,21 @@ async function payWithAlipay() {
   try {
     showToast('正在创建支付宝订单...', 'success');
     const res = await api.post('/api/payment/create-alipay-order', { packageId: pkgId });
-    if (!res.success || !res.payUrl) throw new Error('创建订单失败');
+    if (!res.success || !res.qrDataUrl) throw new Error('创建订单失败');
 
     const container = document.getElementById('payment-method-container');
     container.innerHTML = `
-      <div class="alipay-redirect-box">
-        <p>正在跳转支付宝支付页面...</p>
-        <p><small>订单号：${res.orderId}</small></p>
+      <div class="alipay-qr-box">
+        <h4>支付宝扫码支付</h4>
+        <p class="alipay-qr-price">¥${Number(res.amount).toFixed(2)}</p>
+        <img src="${res.qrDataUrl}" alt="支付宝支付二维码" class="alipay-qr-img" />
+        <p class="alipay-qr-tip">请使用支付宝 App 扫一扫</p>
+        <p class="alipay-qr-order"><small>订单号：${res.orderId}</small></p>
       </div>
     `;
 
-    // 轮询订单状态（用户可能跳回）
+    // 轮询订单状态
     pollOrderStatus(res.orderId, '支付宝');
-
-    // 延迟跳转，让用户看到提示
-    setTimeout(() => {
-      window.location.href = res.payUrl;
-    }, 1000);
   } catch (e) {
     showToast('支付宝订单创建失败：' + e.message, 'error');
   }
