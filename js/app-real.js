@@ -779,8 +779,10 @@ function pollOrderStatus(orderId, methodName) {
         clearInterval(state.pollTimer);
         showToast(methodName + '支付成功！积分已到账', 'success');
         state.user.credits = data.balance;
-        document.getElementById('credits-balance').textContent = data.balance;
-        document.getElementById('header-credits').textContent = data.balance;
+        const creditsBalance = document.getElementById('credits-balance');
+        if (creditsBalance) creditsBalance.textContent = data.balance;
+        const headerCredits = document.getElementById('header-credits');
+        if (headerCredits) headerCredits.textContent = data.balance;
         loadTransactions();
       }
     } catch (e) {
