@@ -314,3 +314,31 @@ body {
   .chat-sidebar { width: 100%; border-radius: 14px 14px 0 0; border-right: none; border-bottom: 1px solid #eee; max-height: 200px; }
   .chat-main { border-radius: 0 0 14px 14px; border-left: 1px solid #eee; }
 }
+
+/* ===== 支付方式 ===== */
+.payment-methods-section {
+  background: #fff; border: 1px solid #eee; border-radius: 16px;
+  padding: 24px; margin-bottom: 32px;
+}
+.payment-methods-section h3 { color: #333; margin-bottom: 16px; font-size: 16px; font-weight: 600; }
+.payment-methods {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.payment-method-btn {
+  padding: 12px 24px; border: 1.5px solid #eee; border-radius: 12px;
+  background: #fff; color: #555; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; min-width: 110px; text-align: center;
+}
+.payment-method-btn:hover { border-color: #7c5cfc; color: #7c5cfc; background: #faf8ff; }
+.payment-method-btn.active { border-color: #7c5cfc; background: #f0ecff; color: #7c5cfc; }
+.payment-method-btn.wechat:hover, .payment-method-btn.wechat.active { border-color: #07c160; color: #07c160; background: #f0fff4; }
+.payment-method-btn.alipay:hover, .payment-method-btn.alipay.active { border-color: #1677ff; color: #1677ff; background: #f0f7ff; }
+.payment-method-btn.paypal:hover, .payment-method-btn.paypal.active { border-color: #0070ba; color: #0070ba; background: #f0f7ff; }
+.payment-method-btn.mock:hover, .payment-method-btn.mock.active { border-color: #999; color: #666; background: #f5f5f5; }
+.payment-method-container { min-height: 60px; }
+.wechat-qr-box, .alipay-redirect-box {
+  text-align: center; padding: 20px; background: #fafbfe; border-radius: 12px; border: 1px solid #eee;
+}
+.wechat-qr-box img { max-width: 256px; width: 100%; border-radius: 8px; margin: 12px 0; }
+.wechat-qr-box p, .alipay-redirect-box p { color: #666; font-size: 13px; margin: 6px 0; }
+

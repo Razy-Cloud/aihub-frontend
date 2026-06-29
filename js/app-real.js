@@ -496,7 +496,6 @@ function renderCredits() {
             <div class="pkg-credits">100 积分</div>
             <div class="pkg-name">体验档</div>
             <div class="pkg-per">¥0.099/积分</div>
-            <div class="paypal-button-container" id="paypal-btn-pkg_9"></div>
           </div>
           <div class="package-card recommended" data-pkg="pkg_29" onclick="selectPackage('pkg_29')">
             <div class="pkg-badge">推荐</div>
@@ -504,23 +503,30 @@ function renderCredits() {
             <div class="pkg-credits">350 积分</div>
             <div class="pkg-name">入门档</div>
             <div class="pkg-per">¥0.085/积分</div>
-            <div class="paypal-button-container" id="paypal-btn-pkg_29"></div>
           </div>
           <div class="package-card" data-pkg="pkg_99" onclick="selectPackage('pkg_99')">
             <div class="pkg-price">¥99</div>
             <div class="pkg-credits">1200 积分</div>
             <div class="pkg-name">常用档</div>
             <div class="pkg-per">¥0.082/积分</div>
-            <div class="paypal-button-container" id="paypal-btn-pkg_99"></div>
           </div>
           <div class="package-card" data-pkg="pkg_299" onclick="selectPackage('pkg_299')">
             <div class="pkg-price">¥299</div>
             <div class="pkg-credits">4000 积分</div>
             <div class="pkg-name">重度档</div>
             <div class="pkg-per">¥0.075/积分</div>
-            <div class="paypal-button-container" id="paypal-btn-pkg_299"></div>
           </div>
         </div>
+      </div>
+      <div class="payment-methods-section" id="payment-methods-section" style="display:none;">
+        <h3>选择支付方式</h3>
+        <div class="payment-methods" id="payment-methods">
+          <button class="payment-method-btn wechat" data-method="wechat" onclick="payWithWechat()">微信支付</button>
+          <button class="payment-method-btn alipay" data-method="alipay" onclick="payWithAlipay()">支付宝</button>
+          <button class="payment-method-btn paypal" data-method="paypal" onclick="payWithPaypal()">PayPal</button>
+          <button class="payment-method-btn mock" data-method="mock" onclick="payWithMock()">模拟支付</button>
+        </div>
+        <div class="payment-method-container" id="payment-method-container"></div>
       </div>
       <div class="transactions-section">
         <h3>积分明细</h3>
@@ -535,35 +541,43 @@ function selectPackage(pkgId) {
   document.querySelectorAll('#packages-grid .package-card').forEach(card => {
     card.classList.toggle('paypal-selected', card.dataset.pkg === pkgId);
   });
+  const section = document.getElementById('payment-methods-section');
+  if (section) section.style.display = 'block';
+  const container = document.getElementById('payment-method-container');
+  if (container) container.innerHTML = '';
+  // 默认不选任何支付方式，等用户点击
 }
 
 // 初始化 PayPal 按钮（在积分中心页面渲染后调用）
-async function initPayPalButtons() {
+async function initPaymentMethods() {
   try {
     const status = await api.get('/api/config/status');
-    const p = status.payment || {};
+    state.paymentStatus = status.payment || {};
+    const p = state.paymentStatus;
 
-    if (!p.paypal || !p.paypalClientId) {
-      // PayPal 未配置，显示模拟支付提示
-      document.querySelectorAll('.paypal-button-container').forEach(el => {
-        el.innerHTML = '<small style="color:#999">模拟支付模式</small>';
-      });
-      return;
-    }
-
-    await loadPayPalSDK(p.paypalClientId, p.paypalEnv);
-
-    // 为每个套餐渲染 PayPal 按钮
-    renderPayPalButton('pkg_9', 'paypal-btn-pkg_9');
-    renderPayPalButton('pkg_29', 'paypal-btn-pkg_29');
-    renderPayPalButton('pkg_99', 'paypal-btn-pkg_99');
-    renderPayPalButton('pkg_299', 'paypal-btn-pkg_299');
-  } catch (e) {
-    console.error('[PayPal] 初始化失败:', e);
-    document.querySelectorAll('.paypal-button-container').forEach(el => {
-      el.innerHTML = '<small style="color:#e74c3c">支付加载失败</small>';
+    // 根据后端配置显示/隐藏支付方式
+    const methods = document.querySelectorAll('#payment-methods .payment-method-btn');
+    methods.forEach(btn => {
+      const method = btn.dataset.method;
+      let available = true;
+      if (method === 'paypal' && (!p.paypal || !p.paypalClientId)) available = false;
+      if (method === 'wechat' && !p.wechat) available = false;
+      if (method === 'alipay' && !p.alipay) available = false;
+      // 模拟支付始终可用
+      btn.style.display = available ? 'inline-block' : 'none';
     });
+
+    if (p.paypal && p.paypalClientId) {
+      await loadPayPalSDK(p.paypalClientId, p.paypalEnv);
+    }
+  } catch (e) {
+    console.error('[Payment] 初始化支付方式失败:', e);
   }
+}
+
+// 兼容旧名：初始化支付方式（加载 PayPal SDK 等）
+async function initPayPalButtons() {
+  await initPaymentMethods();
 }
 
 // 动态加载 PayPal JavaScript SDK
@@ -643,6 +657,136 @@ async function buyPackage(pkgId) {
   } catch (e) {
     showToast('支付失败：' + e.message, 'error');
   }
+}
+
+function getSelectedPackage() {
+  const pkgId = state.selectedPackage;
+  if (!pkgId) {
+    showToast('请先选择一个积分包', 'error');
+    return null;
+  }
+  return pkgId;
+}
+
+function setPaymentActive(method) {
+  document.querySelectorAll('#payment-methods .payment-method-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.method === method);
+  });
+}
+
+async function payWithWechat() {
+  const pkgId = getSelectedPackage();
+  if (!pkgId) return;
+  setPaymentActive('wechat');
+  try {
+    showToast('正在创建微信支付订单...', 'success');
+    const res = await api.post('/api/payment/create-wechat-order', { packageId: pkgId });
+    if (!res.success || !res.qrDataUrl) throw new Error('创建订单失败');
+
+    const container = document.getElementById('payment-method-container');
+    container.innerHTML = `
+      <div class="wechat-qr-box">
+        <p>请使用微信扫一扫支付</p>
+        <img src="${res.qrDataUrl}" alt="微信支付二维码" />
+        <p><small>订单号：${res.orderId}</small></p>
+        <p><small>支付完成后将自动到账</small></p>
+      </div>
+    `;
+
+    // 轮询订单状态
+    pollOrderStatus(res.orderId, '微信支付');
+  } catch (e) {
+    showToast('微信支付订单创建失败：' + e.message, 'error');
+  }
+}
+
+async function payWithAlipay() {
+  const pkgId = getSelectedPackage();
+  if (!pkgId) return;
+  setPaymentActive('alipay');
+  try {
+    showToast('正在创建支付宝订单...', 'success');
+    const res = await api.post('/api/payment/create-alipay-order', { packageId: pkgId });
+    if (!res.success || !res.payUrl) throw new Error('创建订单失败');
+
+    const container = document.getElementById('payment-method-container');
+    container.innerHTML = `
+      <div class="alipay-redirect-box">
+        <p>正在跳转支付宝支付页面...</p>
+        <p><small>订单号：${res.orderId}</small></p>
+      </div>
+    `;
+
+    // 轮询订单状态（用户可能跳回）
+    pollOrderStatus(res.orderId, '支付宝');
+
+    // 延迟跳转，让用户看到提示
+    setTimeout(() => {
+      window.location.href = res.payUrl;
+    }, 1000);
+  } catch (e) {
+    showToast('支付宝订单创建失败：' + e.message, 'error');
+  }
+}
+
+async function payWithPaypal() {
+  const pkgId = getSelectedPackage();
+  if (!pkgId) return;
+  setPaymentActive('paypal');
+
+  const container = document.getElementById('payment-method-container');
+  container.innerHTML = '<div id="paypal-active-button"></div>';
+
+  if (!window.paypal) {
+    showToast('PayPal SDK 未加载，请刷新页面重试', 'error');
+    return;
+  }
+  renderPayPalButton(pkgId, 'paypal-active-button');
+}
+
+async function payWithMock() {
+  const pkgId = getSelectedPackage();
+  if (!pkgId) return;
+  setPaymentActive('mock');
+  try {
+    if (!confirm('确认使用模拟支付？积分将立即到账。')) return;
+    const data = await api.post('/api/payment/create-order', { packageId: pkgId });
+    showToast('模拟支付成功！积分已到账。余额：' + data.balance, 'success');
+    state.user.credits = data.balance;
+    document.getElementById('credits-balance').textContent = data.balance;
+    document.getElementById('header-credits').textContent = data.balance;
+    loadTransactions();
+  } catch (e) {
+    showToast('支付失败：' + e.message, 'error');
+  }
+}
+
+function pollOrderStatus(orderId, methodName) {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  let attempts = 0;
+  const maxAttempts = 60; // 最多 60 次，每次 3 秒，共 3 分钟
+
+  state.pollTimer = setInterval(async () => {
+    attempts++;
+    if (attempts > maxAttempts) {
+      clearInterval(state.pollTimer);
+      showToast('订单状态查询超时，请稍后刷新页面查看', 'error');
+      return;
+    }
+    try {
+      const data = await api.get('/api/payment/order-status?orderId=' + orderId);
+      if (data.status === 'paid') {
+        clearInterval(state.pollTimer);
+        showToast(methodName + '支付成功！积分已到账', 'success');
+        state.user.credits = data.balance;
+        document.getElementById('credits-balance').textContent = data.balance;
+        document.getElementById('header-credits').textContent = data.balance;
+        loadTransactions();
+      }
+    } catch (e) {
+      console.error('订单状态查询失败:', e);
+    }
+  }, 3000);
 }
 
 async function loadTransactions() {
