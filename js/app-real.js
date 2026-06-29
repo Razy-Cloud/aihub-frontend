@@ -712,10 +712,11 @@ async function payWithAlipay() {
     const container = document.getElementById('payment-method-container');
     container.innerHTML = `
       <div class="alipay-qr-box">
-        <h4>支付宝扫码支付</h4>
+        <h4>支付宝支付</h4>
         <p class="alipay-qr-price">¥${Number(res.amount).toFixed(2)}</p>
         <img src="${res.qrDataUrl}" alt="支付宝支付二维码" class="alipay-qr-img" />
-        <p class="alipay-qr-tip">请使用支付宝 App 扫一扫</p>
+        <p class="alipay-qr-tip">扫码或点击下方按钮完成支付</p>
+        <a href="${res.payUrl}" target="_blank" rel="noopener" class="alipay-pay-link">打开支付页面</a>
         <p class="alipay-qr-order"><small>订单号：${res.orderId}</small></p>
       </div>
     `;
