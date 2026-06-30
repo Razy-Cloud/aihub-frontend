@@ -185,14 +185,14 @@ function showLogin() {
         <div id="login-form" class="login-form">
           <div class="form-group">
             <label>手机号</label>
-            <input type="tel" id="login-phone" placeholder="请输入手机号" value="13800000000">
+            <input type="tel" id="login-phone" placeholder="请输入手机号">
           </div>
           <div class="form-group">
             <label>密码</label>
-            <input type="password" id="login-pwd" placeholder="请输入密码" value="admin123456">
+            <input type="password" id="login-pwd" placeholder="请输入密码">
           </div>
           <button class="btn-primary" onclick="doLogin()">登 录</button>
-          <div class="login-hint">管理员账号已预填，也可注册新账号（送50积分）</div>
+          <div class="login-hint">注册新账号赠送50积分</div>
         </div>
         <div id="register-form" class="login-form" style="display:none">
           <div class="form-group">
@@ -587,15 +587,21 @@ async function initPaymentMethods() {
     methods.forEach(btn => {
       const method = btn.dataset.method;
       let available = true;
-      if (method === 'paypal' && (!p.paypal || !p.paypalClientId)) available = false;
+      if (method === 'paypal' && !p.paypal) available = false;
       if (method === 'wechat' && !p.wechat) available = false;
       if (method === 'alipay' && !p.alipay) available = false;
-      // 模拟支付始终可用
+      if (method === 'mock' && !p.mock) available = false; // 仅开发环境显示模拟支付
       btn.style.display = available ? 'inline-block' : 'none';
     });
 
-    if (p.paypal && p.paypalClientId) {
-      await loadPayPalSDK(p.paypalClientId, p.paypalEnv);
+    // PayPal SDK：通过后端专用接口获取 Client ID（不再从前端 config/status 暴露）
+    if (p.paypal) {
+      try {
+        const paypalConfig = await api.get('/api/payment/paypal-config');
+        await loadPayPalSDK(paypalConfig.clientId, p.paypalEnv);
+      } catch (e) {
+        console.error('[Payment] 加载 PayPal SDK 失败:', e);
+      }
     }
   } catch (e) {
     console.error('[Payment] 初始化支付方式失败:', e);
