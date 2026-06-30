@@ -24,14 +24,14 @@
       "js/**/*.js"
     ]
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://aihub-backend-app-production.up.railway.app/api/$1"
+      "src": "/api/(.*)",
+      "dest": "https://aihub-backend-app-production.up.railway.app/api/"
     },
     {
-      "source": "/((?!admin.html$).*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "dest": "/"
     }
   ]
 }
