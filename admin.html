@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIHub 管理后台</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #f0f2f5; color: #1a1a2e; font-size: 14px; line-height: 1.6; min-height: 100vh;
+}
+
+/* ===== LOGIN ===== */
+.login-wrap {
+  display: flex; justify-content: center; align-items: center; min-height: 100vh;
+  background: linear-gradient(135deg, #f0f4ff 0%, #faf5ff 100%);
+}
+.login-box {
+  background: #fff; border-radius: 20px; padding: 48px 40px 40px; width: 400px; text-align: center;
+  box-shadow: 0 4px 24px rgba(124,92,252,0.08), 0 1px 4px rgba(0,0,0,0.04);
+}
+.login-box .logo { font-size: 40px; margin-bottom: 8px; }
+.login-box h1 { font-size: 24px; color: #7c5cfc; margin: 0 0 4px; font-weight: 700; }
+.login-box .sub { color: #999; font-size: 13px; margin-bottom: 32px; }
+.fg { text-align: left; margin-bottom: 16px; }
+.fg label { display: block; color: #555; font-size: 13px; margin-bottom: 6px; font-weight: 500; }
+.fg input {
+  width: 100%; padding: 11px 14px; background: #f8f9fc; border: 1.5px solid #e8e8f0;
+  border-radius: 10px; font-size: 14px; outline: none; transition: border-color 0.2s;
+}
+.fg input:focus { border-color: #7c5cfc; background: #fff; }
+.btn {
+  width: 100%; padding: 12px; border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.btn.purple { background: #7c5cfc; color: #fff; }
+.btn.purple:hover { background: #6a4ae8; }
+.btn.purple:active { transform: scale(0.98); }
+.btn.gray { background: #f0f0f5; color: #666; }
+.err { color: #e74c3c; font-size: 13px; margin-top: 10px; min-height: 20px; }
+
+/* ===== ADMIN LAYOUT ===== */
+.admin-wrap { display: none; min-height: 100vh; }
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 28px; height: 56px; background: #fff; border-bottom: 1px solid #eee;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.04); position: sticky; top: 0; z-index: 100;
+}
+.topbar .brand { color: #7c5cfc; font-weight: 700; font-size: 18px; }
+.topbar .user-info { display: flex; align-items: center; gap: 12px; }
+.topbar .logout-btn { padding: 6px 16px; background: none; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 13px; color: #666; }
+.topbar .logout-btn:hover { background: #fee; border-color: #e74c3c; color: #e74c3c; }
+.container { max-width: 1280px; margin: 0 auto; padding: 24px 28px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; margin-bottom: 24px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.tab {
+  flex: 1; padding: 14px 20px; text-align: center; cursor: pointer; font-size: 14px; font-weight: 500;
+  color: #666; border-bottom: 3px solid transparent; transition: all 0.2s; user-select: none;
+}
+.tab:hover { background: #fafbff; color: #7c5cfc; }
+.tab.on { color: #7c5cfc; border-bottom-color: #7c5cfc; background: #fafbff; }
+
+/* Cards */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card {
+  background: #fff; border-radius: 12px; padding: 20px 24px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04); transition: transform 0.15s;
+}
+.stat-card:hover { transform: translateY(-2px); }
+.stat-card .val { font-size: 28px; font-weight: 700; color: #1a1a2e; }
+.stat-card .lbl { font-size: 13px; color: #999; margin-top: 4px; }
+.stat-card .sub { font-size: 12px; color: #7c5cfc; margin-top: 2px; }
+
+/* Tables */
+.panel { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); margin-bottom: 24px; }
+.panel h3 { font-size: 16px; margin: 0 0 16px; color: #333; }
+.tbl-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th { background: #fafbfc; padding: 10px 14px; text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #eee; white-space: nowrap; }
+table.data td { padding: 10px 14px; border-bottom: 1px solid #f0f0f5; }
+table.data tr:hover td { background: #fafbff; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+.badge.g { background: #e6f9ee; color: #00a854; }
+.badge.y { background: #fff7e6; color: #fa8c16; }
+.badge.r { background: #fff1f0; color: #f5222d; }
+.badge.b { background: #e6f0ff; color: #1890ff; }
+.badge.o { background: #f5f5fa; color: #888; }
+
+/* Search */
+.toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.toolbar input, .toolbar select {
+  padding: 8px 14px; border: 1.5px solid #e8e8f0; border-radius: 8px; font-size: 13px;
+  outline: none; background: #fafbfc; color: #333;
+}
+.toolbar input:focus, .toolbar select:focus { border-color: #7c5cfc; background: #fff; }
+.toolbar input { flex: 1; min-width: 180px; }
+.btn-sm {
+  padding: 8px 18px; border: none; border-radius: 8px; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-sm.purple { background: #7c5cfc; color: #fff; }
+.btn-sm.purple:hover { background: #6a4ae8; }
+.btn-sm.gray { background: #f0f0f5; color: #555; }
+.btn-sm.gray:hover { background: #e4e4ee; }
+
+/* Pagination */
+.pgn { display: flex; justify-content: center; gap: 6px; margin-top: 16px; }
+.pgn button {
+  width: 34px; height: 34px; border: 1px solid #ddd; border-radius: 8px;
+  background: #fff; cursor: pointer; font-size: 13px; color: #555; transition: all 0.15s;
+}
+.pgn button:hover { border-color: #7c5cfc; color: #7c5cfc; }
+.pgn button.on { background: #7c5cfc; color: #fff; border-color: #7c5cfc; }
+
+/* Modal */
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200;
+  display: flex; justify-content: center; align-items: center;
+}
+.modal-box {
+  background: #fff; border-radius: 14px; padding: 28px; width: 460px; max-width: 90vw;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.15); animation: fadeUp 0.2s ease;
+}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.modal-box h3 { margin: 0 0 20px; font-size: 17px; color: #333; }
+.modal-row { margin-bottom: 14px; }
+.modal-row label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; font-weight: 500; }
+.modal-row input, .modal-row select {
+  width: 100%; padding: 9px 12px; border: 1.5px solid #e8e8f0; border-radius: 8px;
+  font-size: 13px; outline: none; background: #fafbfc;
+}
+.modal-row input:focus, .modal-row select:focus { border-color: #7c5cfc; background: #fff; }
+.modal-acts { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+/* Toast */
+.toast {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 999;
+  padding: 12px 28px; border-radius: 10px; font-size: 14px; font-weight: 500;
+  animation: slideDown 0.3s ease; pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.toast.ok { background: #e6f9ee; color: #00a854; }
+.toast.err { background: #fff1f0; color: #f5222d; }
+@keyframes slideDown { from { opacity: 0; transform: translateX(-50%) translateY(-20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* Profit charts */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } }
+.loading { text-align: center; padding: 40px; color: #999; }
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="loginWrap" class="login-wrap">
+  <div class="login-box">
+    <div class="logo">🛡️</div>
+    <h1>AIHub 管理后台</h1>
+    <p class="sub">请使用管理员账号登录</p>
+    <div class="fg">
+      <label>手机号</label>
+      <input type="text" id="phone" placeholder="请输入管理员手机号" autocomplete="tel">
+    </div>
+    <div class="fg">
+      <label>密码</label>
+      <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password">
+    </div>
+    <button class="btn purple" id="loginBtn" onclick="doLogin()">登 录</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ===== ADMIN PANEL ===== -->
+<div id="adminWrap" class="admin-wrap">
+  <div class="topbar">
+    <div class="brand">🛡️ AIHub 管理后台</div>
+    <div class="user-info">
+      <span id="adminName">管理员</span>
+      <button class="logout-btn" onclick="doLogout()">退出登录</button>
+    </div>
+  </div>
+  <div class="container">
+    <div class="tabs">
+      <div class="tab on" data-tab="dashboard" onclick="switchTab('dashboard')">📊 数据看板</div>
+      <div class="tab" data-tab="users" onclick="switchTab('users')">👥 用户管理</div>
+      <div class="tab" data-tab="orders" onclick="switchTab('orders')">📦 订单管理</div>
+      <div class="tab" data-tab="profit" onclick="switchTab('profit')">💰 利润分析</div>
+    </div>
+    <div id="tabContent"><div class="loading">加载中...</div></div>
+  </div>
+</div>
+
+<script>
+// ===== CONFIG =====
+const API = 'https://aihub-backend-app-production.up.railway.app';
+let TOKEN = localStorage.getItem('aihub_admin_token') || '';
+let USER = JSON.parse(localStorage.getItem('aihub_admin_user') || 'null');
+
+// ===== UTILS =====
+function esc(s) {
+  var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
+}
+function toast(msg, type) {
+  var t = document.createElement('div');
+  t.className = 'toast ' + (type === 'ok' ? 'ok' : 'err');
+  t.textContent = msg; document.body.appendChild(t);
+  setTimeout(function(){ t.remove(); }, 2500);
+}
+async function api(method, path, body) {
+  var headers = { 'Content-Type': 'application/json' };
+  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
+  var opts = { method: method, headers: headers };
+  if (body) opts.body = JSON.stringify(body);
+  var res = await fetch(API + path, opts);
+  var data = await res.json();
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) { doLogout(); throw new Error('登录已过期'); }
+    throw new Error(data.error || '请求失败');
+  }
+  return data;
+}
+function get(path) { return api('GET', path); }
+function post(path, body) { return api('POST', path, body); }
+function put(path, body) { return api('PUT', path, body); }
+
+// ===== LOGIN =====
+async function doLogin() {
+  var phone = document.getElementById('phone').value.trim();
+  var pwd = document.getElementById('password').value.trim();
+  var err = document.getElementById('loginErr');
+  if (!phone || !pwd) { err.textContent = '请输入手机号和密码'; return; }
+  document.getElementById('loginBtn').disabled = true;
+  document.getElementById('loginBtn').textContent = '登录中...';
+  err.textContent = '';
+  try {
+    var data = await post('/api/auth/login', { phone: phone, password: pwd });
+    if (data.user.role !== 'admin') throw new Error('该账号不是管理员');
+    TOKEN = data.token; USER = data.user;
+    localStorage.setItem('aihub_admin_token', TOKEN);
+    localStorage.setItem('aihub_admin_user', JSON.stringify(USER));
+    showAdmin();
+  } catch (e) {
+    err.textContent = '登录失败：' + e.message;
+  }
+  document.getElementById('loginBtn').disabled = false;
+  document.getElementById('loginBtn').textContent = '登 录';
+}
+
+function doLogout() {
+  TOKEN = ''; USER = null;
+  localStorage.removeItem('aihub_admin_token');
+  localStorage.removeItem('aihub_admin_user');
+  document.getElementById('loginWrap').style.display = 'flex';
+  document.getElementById('adminWrap').style.display = 'none';
+  document.getElementById('phone').value = '';
+  document.getElementById('password').value = '';
+  document.getElementById('loginErr').textContent = '';
+}
+
+function showAdmin() {
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('adminWrap').style.display = 'block';
+  document.getElementById('adminName').textContent = (USER.nickname || '管理员');
+  switchTab('dashboard');
+}
+
+// ===== TABS =====
+async function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('on', t.dataset.tab === tab); });
+  var ct = document.getElementById('tabContent');
+  ct.innerHTML = '<div class="loading">加载中...</div>';
+  try {
+    switch (tab) {
+      case 'dashboard': ct.innerHTML = await renderDashboard(); break;
+      case 'users': ct.innerHTML = await renderUsers(); break;
+      case 'orders': ct.innerHTML = await renderOrders(); break;
+      case 'profit': ct.innerHTML = await renderProfit(); break;
+    }
+  } catch (e) { ct.innerHTML = '<div class="loading">加载失败：' + esc(e.message) + '</div>'; }
+}
+
+// ===== DASHBOARD =====
+async function renderDashboard() {
+  var d = await get('/api/admin/dashboard');
+  var s = d.stats;
+  return '<div class="stats">' +
+    card(s.totalUsers, '总用户', '今日 +' + s.todayNewUsers) +
+    card(s.activeUsers, '活跃用户', '封禁 ' + s.bannedUsers) +
+    card(s.totalOrders, '总订单', '已支付') +
+    card('¥' + s.totalRevenue.toFixed(2), '总收入', '今日 ¥' + (s.todayRevenue||0).toFixed(2)) +
+    card(s.totalCreditsConsumed, '已消耗积分', '人均 ' + s.avgCreditsPerUser + ' 积分') +
+    card(s.totalCreditsRecharged, '已充值积分', '') +
+    '</div>';
+}
+function card(val, label, sub) {
+  return '<div class="stat-card"><div class="val">' + val + '</div><div class="lbl">' + label + '</div><div class="sub">' + (sub || '') + '</div></div>';
+}
+
+// ===== USERS =====
+var usersPage = 1, usersSearch = '';
+async function renderUsers(search, page) {
+  if (search !== undefined) usersSearch = search;
+  if (page !== undefined) usersPage = page;
+  var params = new URLSearchParams({ limit: '20', page: usersPage });
+  if (usersSearch) params.set('search', usersSearch);
+  var d = await get('/api/admin/users?' + params.toString());
+  var pages = Math.ceil(d.total / d.limit);
+  var rows = d.users.map(function(u){
+    return '<tr>' +
+      '<td>' + u.id + '</td><td>' + esc(u.nickname||'') + '</td>' +
+      '<td>' + u.phone + (u.email ? '<br><small>' + esc(u.email) + '</small>' : '') + '</td>' +
+      '<td><strong>' + u.credits + '</strong></td>' +
+      '<td>¥' + ((u.total_recharged||0).toFixed(2)) + '</td>' +
+      '<td>' + (u.total_consumed||0) + '</td>' +
+      '<td><span class="badge ' + (u.status==='active'?'g':'r') + '">' + u.status + '</span></td>' +
+      '<td><span class="badge ' + (u.role==='admin'?'b':'o') + '">' + u.role + '</span></td>' +
+      '<td><button class="btn-sm gray" onclick="editUser(' + u.id + ')">✏️ 编辑</button></td>' +
+      '</tr>';
+  }).join('');
+  var pgn = '';
+  if (pages > 1) {
+    pgn = '<div class="pgn">';
+    for (var i = 1; i <= pages; i++) {
+      pgn += '<button class="' + (i === usersPage ? 'on' : '') + '" onclick="switchUPage(' + i + ')">' + i + '</button>';
+    }
+    pgn += '</div>';
+  }
+  return '<div class="panel"><h3>用户管理</h3>' +
+    '<div class="toolbar">' +
+    '<input type="text" id="uSearch" placeholder="搜索手机号/昵称/邮箱..." value="' + esc(usersSearch) + '" onkeydown="if(event.key===\'Enter\')doSearch()">' +
+    '<button class="btn-sm purple" onclick="doSearch()">搜索</button>' +
+    '</div>' +
+    '<div class="tbl-wrap"><table class="data">' +
+    '<thead><tr><th>ID</th><th>昵称</th><th>手机号/邮箱</th><th>积分</th><th>累计充值</th><th>累计消耗</th><th>状态</th><th>角色</th><th>操作</th></tr></thead>' +
+    '<tbody>' + (rows || '<tr><td colspan="9" style="text-align:center;padding:20px;">暂无数据</td></tr>') + '</tbody>' +
+    '</table></div>' +
+    '<div style="margin-top:8px;color:#999;font-size:12px;">共 ' + d.total + ' 个用户，第 ' + d.page + '/' + pages + ' 页</div>' +
+    pgn + '</div>';
+}
+function doSearch() {
+  usersSearch = document.getElementById('uSearch').value; usersPage = 1;
+  switchUPage(1);
+}
+async function switchUPage(p) { usersPage = p; document.getElementById('tabContent').innerHTML = await renderUsers(); }
+
+// ===== EDIT USER =====
+var editingUserId = null;
+async function editUser(id) {
+  editingUserId = id;
+  var d = await get('/api/admin/users/' + id);
+  var u = d.user;
+  showModal(
+    '<h3>编辑用户 #' + u.id + '</h3>' +
+    '<div class="modal-row"><label>手机号</label><input type="text" value="' + u.phone + '" disabled style="background:#f0f0f5;"></div>' +
+    '<div class="modal-row"><label>邮箱</label><input type="email" id="eEmail" value="' + esc(u.email||'') + '" placeholder="未绑定"></div>' +
+    '<div class="modal-row"><label>昵称</label><input type="text" id="eNick" value="' + esc(u.nickname||'') + '"></div>' +
+    '<div class="modal-row"><label>积分（当前：' + u.credits + '）</label><input type="number" id="eCredits" value="' + u.credits + '"></div>' +
+    '<div class="modal-row"><label>角色</label><select id="eRole"><option value="user"' + (u.role==='user'?' selected':'') + '>普通用户</option><option value="admin"' + (u.role==='admin'?' selected':'') + '>管理员</option></select></div>' +
+    '<div class="modal-row"><label>状态</label><select id="eStatus"><option value="active"' + (u.status==='active'?' selected':'') + '>正常</option><option value="banned"' + (u.status==='banned'?' selected':'') + '>封禁</option></select></div>' +
+    '<div style="font-size:12px;color:#999;margin-top:8px;">注册时间：' + (u.created_at||'-') + ' | 累计充值：¥' + ((u.total_recharged||0).toFixed(2)) + ' | 累计消耗：' + (u.total_consumed||0) + ' 积分</div>' +
+    '<div class="modal-acts">' +
+    '<button class="btn-sm gray" onclick="closeModal()">取消</button>' +
+    '<button class="btn-sm purple" onclick="saveEdit()">保存</button>' +
+    '</div>', saveEdit);
+}
+async function saveEdit() {
+  var body = {
+    credits: parseInt(document.getElementById('eCredits').value),
+    role: document.getElementById('eRole').value,
+    status: document.getElementById('eStatus').value,
+    nickname: document.getElementById('eNick').value,
+    email: document.getElementById('eEmail').value
+  };
+  await put('/api/admin/users/' + editingUserId, body);
+  closeModal();
+  toast('用户信息已更新', 'ok');
+  document.getElementById('tabContent').innerHTML = await renderUsers();
+}
+function showModal(html) {
+  var div = document.createElement('div');
+  div.className = 'modal-bg';
+  div.onclick = function(e){ if (e.target === div) div.remove(); };
+  div.innerHTML = '<div class="modal-box" onclick="event.stopPropagation()">' + html + '</div>';
+  document.body.appendChild(div);
+}
+function closeModal() { var m = document.querySelector('.modal-bg'); if (m) m.remove(); }
+
+// ===== ORDERS =====
+var ordersPage = 1, ordersStatus = '';
+async function renderOrders(status, page) {
+  if (status !== undefined) ordersStatus = status;
+  if (page !== undefined) ordersPage = page;
+  var params = new URLSearchParams({ limit: '20', page: ordersPage });
+  if (ordersStatus) params.set('status', ordersStatus);
+  var d = await get('/api/admin/orders?' + params.toString());
+  var pages = Math.ceil(d.total / d.limit);
+  var rows = d.orders.map(function(o){
+    var sb = 'badge ';
+    if (o.status === 'paid') sb += 'g';
+    else if (o.status === 'pending') sb += 'y';
+    else sb += 'r';
+    return '<tr>' +
+      '<td><code>' + o.id + '</code></td>' +
+      '<td>' + esc(o.nickname||'') + '<br><small>' + (o.phone||'') + '</small></td>' +
+      '<td>' + (o.package_name||'') + '</td>' +
+      '<td>¥' + (o.amount||0).toFixed(2) + '</td>' +
+      '<td>' + (o.credits||0) + '</td>' +
+      '<td>' + (o.payment_method||'模拟') + '</td>' +
+      '<td><span class="' + sb + '">' + o.status + '</span></td>' +
+      '<td>' + (o.created_at||'') + '</td>' +
+      '</tr>';
+  }).join('');
+  return '<div class="panel"><h3>订单管理</h3>' +
+    '<div class="toolbar">' +
+    '<select id="oStatus" onchange="switchOPage(1,true)">' +
+    '<option value="">全部状态</option>' +
+    '<option value="paid"' + (ordersStatus==='paid'?' selected':'') + '>已支付</option>' +
+    '<option value="pending"' + (ordersStatus==='pending'?' selected':'') + '>待支付</option>' +
+    '<option value="failed"' + (ordersStatus==='failed'?' selected':'') + '>失败</option>' +
+    '<option value="refunded"' + (ordersStatus==='refunded'?' selected':'') + '>已退款</option>' +
+    '</select>' +
+    '</div>' +
+    '<div class="tbl-wrap"><table class="data">' +
+    '<thead><tr><th>订单号</th><th>用户</th><th>套餐</th><th>金额</th><th>积分</th><th>支付方式</th><th>状态</th><th>时间</th></tr></thead>' +
+    '<tbody>' + (rows || '<tr><td colspan="8" style="text-align:center;padding:20px;">暂无订单</td></tr>') + '</tbody>' +
+    '</table></div>' +
+    '<div style="margin-top:8px;color:#999;font-size:12px;">共 ' + d.total + ' 个订单，第 ' + d.page + '/' + pages + ' 页</div>' +
+    '</div>';
+}
+async function switchOPage(p, fromStatus) {
+  if (fromStatus) ordersStatus = document.getElementById('oStatus').value;
+  ordersPage = p;
+  document.getElementById('tabContent').innerHTML = await renderOrders();
+}
+
+// ===== PROFIT =====
+async function renderProfit() {
+  var d = await get('/api/admin/profit');
+  var r = d.revenue, c = d.apiCost, p = d.profit, pr = d.pricing;
+  var pkgRows = d.packageSales.map(function(s){
+    return '<tr><td>' + (s.package_name||'未知') + '</td><td>' + s.count + '</td><td>¥' + (s.revenue||0).toFixed(2) + '</td><td>' + (s.total_credits||0) + '</td></tr>';
+  }).join('');
+  var modelRows = c.details.map(function(m){
+    return '<tr><td>' + m.model + '</td><td>' + m.calls + '</td><td>' + m.creditsConsumed + '</td><td>¥' + m.unitCost.toFixed(3) + '</td><td>¥' + m.totalCost.toFixed(2) + '</td></tr>';
+  }).join('');
+  var pkgProfit = pr.packages.map(function(pkg){
+    var apiCost = pr.apiCostPerCreditAvg * pkg.credits;
+    var margin = (((pkg.price - apiCost) / pkg.price) * 100).toFixed(1);
+    return '<tr><td>' + pkg.id + '</td><td>¥' + pkg.price.toFixed(2) + '</td><td>' + pkg.credits + '</td><td>¥' + pkg.costPerCredit.toFixed(3) + '</td><td>¥' + pr.apiCostPerCreditAvg.toFixed(4) + '</td><td>' + margin + '%</td></tr>';
+  }).join('');
+  var monthRows = (d.monthlyRevenue||[]).map(function(m){
+    return '<tr><td>' + m.month + '</td><td>' + m.orders + '</td><td>¥' + (m.revenue||0).toFixed(2) + '</td><td>' + m.credits_sold + '</td></tr>';
+  }).join('');
+  return '' +
+    '<h3 style="margin-bottom:16px;">利润概览</h3>' +
+    '<div class="stats">' +
+    card('¥' + r.total.toFixed(2), '总收入', '本月 ¥' + ((r.month||0).toFixed(2))) +
+    card('¥' + c.total.toFixed(2), 'API 成本', '每次 ¥' + c.perCall.toFixed(3)) +
+    card('¥' + p.gross.toFixed(2), '毛利润', '利润率 ' + p.margin + '%') +
+    card('¥' + pr.apiCostPerCreditAvg.toFixed(4), '每积分 API 成本', '最低套餐 ¥' + pr.packages[3].costPerCredit + '/积分') +
+    '</div>' +
+    '<div class="panel"><h3>定价与利润分析</h3>' +
+    '<div class="tbl-wrap"><table class="data">' +
+    '<thead><tr><th>套餐</th><th>售价</th><th>积分</th><th>售价/积分</th><th>API成本/积分</th><th>利润率</th></tr></thead>' +
+    '<tbody>' + pkgProfit + '</tbody>' +
+    '</table></div></div>' +
+    '<div class="grid2">' +
+    '<div class="panel"><h3>套餐销量分布</h3>' +
+    '<div class="tbl-wrap"><table class="data">' +
+    '<thead><tr><th>套餐</th><th>销量</th><th>收入</th><th>积分发放</th></tr></thead>' +
+    '<tbody>' + (pkgRows || '<tr><td colspan="4" style="text-align:center;">暂无数据</td></tr>') + '</tbody>' +
+    '</table></div></div>' +
+    '<div class="panel"><h3>模型调用成本明细</h3>' +
+    '<div class="tbl-wrap"><table class="data">' +
+    '<thead><tr><th>模型</th><th>调用次数</th><th>消耗积分</th><th>单次成本</th><th>总成本</th></tr></thead>' +
+    '<tbody>' + (modelRows || '<tr><td colspan="5" style="text-align:center;">暂无数据</td></tr>') + '</tbody>' +
+    '</table></div></div>' +
+    '</div>' +
+    (monthRows ? '<div class="panel"><h3>月度收入趋势</h3>' +
+    '<div class="tbl-wrap"><table class="data">' +
+    '<thead><tr><th>月份</th><th>订单数</th><th>收入</th><th>售出积分</th></tr></thead>' +
+    '<tbody>' + monthRows + '</tbody>' +
+    '</table></div></div>' : '');
+}
+
+// ===== INIT =====
+(function() {
+  if (TOKEN && USER) {
+    // Verify token is still valid
+    get('/api/auth/me').then(function(data) {
+      if (data.user && data.user.role === 'admin') { USER = data.user; showAdmin(); }
+      else { doLogout(); }
+    }).catch(function() { doLogout(); });
+  }
+})();
+
+// Enter key to login
+document.getElementById('password').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+</script>
+</body>
+</html>
