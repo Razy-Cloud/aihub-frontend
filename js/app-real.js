@@ -1044,7 +1044,7 @@ function showPage(page) {
     case 'video': main.innerHTML = '<div class="coming-soon"><h2>🎬 AI 视频</h2><p>接入视频生成 API 后开放，当前积分定价：80积分/条</p></div>'; break;
     case 'doc': main.innerHTML = '<div class="coming-soon"><h2>📄 文档解析</h2><p>接入文档解析服务后开放，当前积分定价：15积分/份</p></div>'; break;
     case 'profile': main.innerHTML = renderProfile(); break;
-    case 'admin': if (state.user.role === 'admin') { main.innerHTML = '<div class="page-admin"><p style="text-align:center;padding:40px;">加载管理后台...</p></div>'; renderAdmin().then(html => main.innerHTML = html); } else main.innerHTML = '<p>无权限</p>'; break;
+    case 'admin': if (state.user.role === 'admin') { renderAdmin(); } else main.innerHTML = '<p>无权限</p>'; break;
   }
 }
 
@@ -1110,10 +1110,13 @@ function renderProfile() {
 }
 
 async function renderAdmin() {
+  const main = document.getElementById('main-content');
+  if (!main) return;
+  main.innerHTML = '<div class="page-admin"><p style="text-align:center;padding:40px;">加载管理后台...</p></div>';
   try {
     const data = await api.get('/api/admin/dashboard');
     const s = data.stats;
-    return `
+    main.innerHTML = `
       <div class="page-admin admin-layout">
         <h2>管理后台</h2>
         <div class="admin-tabs" id="admin-tabs">
@@ -1134,7 +1137,7 @@ async function renderAdmin() {
         </div>
       </div>`;
   } catch (e) {
-    return '<div class="page-admin"><p>加载失败：' + e.message + '</p></div>';
+    main.innerHTML = '<div class="page-admin"><p>加载失败：' + e.message + '</p></div>';
   }
 }
 
