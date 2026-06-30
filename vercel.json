@@ -27,10 +27,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "https://aihub-backend-app-production.up.railway.app/api/$1"
-    },
-    {
-      "handle": "filesystem"
+      "dest": "https://aihub-backend-app-production.up.railway.app/api/"
     },
     {
       "handle": "filesystem"
