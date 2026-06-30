@@ -1,6 +1,15 @@
 {
+  "name": "aihub-frontend",
   "version": 2,
   "public": true,
+  "static": {
+    "upload": [
+      "index.html",
+      "admin.html",
+      "css/**/*.css",
+      "js/**/*.js"
+    ]
+  },
   "routes": [
     {
       "src": "/api/(.*)",
