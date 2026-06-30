@@ -62,6 +62,7 @@ const api = {
   },
   async get(path) { return this.request(path); },
   async post(path, body) { return this.request(path, { method: 'POST', body }); },
+  async put(path, body) { return this.request(path, { method: 'PUT', body }); },
 
   // 流式请求（SSE）
   async streamChat(message, model, onToken, onDone, onError) {
@@ -116,9 +117,11 @@ async function login(phone, password) {
   }
 }
 
-async function register(phone, password, nickname) {
+async function register(phone, password, nickname, email) {
   try {
-    const data = await api.post('/api/auth/register', { phone, password, nickname });
+    const body = { phone, password, nickname };
+    if (email) body.email = email;
+    const data = await api.post('/api/auth/register', body);
     state.token = data.token;
     state.user = data.user;
     localStorage.setItem('aihub_token', data.token);
@@ -200,6 +203,10 @@ function showLogin() {
             <input type="tel" id="reg-phone" placeholder="请输入手机号">
           </div>
           <div class="form-group">
+            <label>邮箱（选填，用于找回密码）</label>
+            <input type="email" id="reg-email" placeholder="请输入邮箱（选填）">
+          </div>
+          <div class="form-group">
             <label>昵称</label>
             <input type="text" id="reg-nick" placeholder="请输入昵称">
           </div>
@@ -232,9 +239,10 @@ function doRegister() {
   const phone = document.getElementById('reg-phone').value.trim();
   const pwd = document.getElementById('reg-pwd').value;
   const nick = document.getElementById('reg-nick').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
   if (!phone || !pwd) return showToast('请填写完整', 'error');
   if (pwd.length < 6) return showToast('密码至少6位', 'error');
-  register(phone, pwd, nick);
+  register(phone, pwd, nick, email);
 }
 
 async function showApp() {
@@ -1036,7 +1044,7 @@ function showPage(page) {
     case 'video': main.innerHTML = '<div class="coming-soon"><h2>🎬 AI 视频</h2><p>接入视频生成 API 后开放，当前积分定价：80积分/条</p></div>'; break;
     case 'doc': main.innerHTML = '<div class="coming-soon"><h2>📄 文档解析</h2><p>接入文档解析服务后开放，当前积分定价：15积分/份</p></div>'; break;
     case 'profile': main.innerHTML = renderProfile(); break;
-    case 'admin': if (state.user.role === 'admin') main.innerHTML = renderAdmin(); else main.innerHTML = '<p>无权限</p>'; break;
+    case 'admin': if (state.user.role === 'admin') { main.innerHTML = '<div class="page-admin"><p style="text-align:center;padding:40px;">加载管理后台...</p></div>'; renderAdmin().then(html => main.innerHTML = html); } else main.innerHTML = '<p>无权限</p>'; break;
   }
 }
 
@@ -1104,23 +1112,271 @@ function renderProfile() {
 async function renderAdmin() {
   try {
     const data = await api.get('/api/admin/dashboard');
+    const s = data.stats;
     return `
-      <div class="page-admin">
+      <div class="page-admin admin-layout">
         <h2>管理后台</h2>
-        <div class="admin-stats">
-          <div class="stat-card"><div class="stat-value">${data.stats.totalUsers}</div><div>总用户</div></div>
-          <div class="stat-card"><div class="stat-value">${data.stats.totalOrders}</div><div>总订单</div></div>
-          <div class="stat-card"><div class="stat-value">¥${data.stats.totalRevenue}</div><div>总收入</div></div>
+        <div class="admin-tabs" id="admin-tabs">
+          <div class="admin-tab active" onclick="switchAdminTab('dashboard', this)">📊 数据看板</div>
+          <div class="admin-tab" onclick="switchAdminTab('users', this)">👥 用户管理</div>
+          <div class="admin-tab" onclick="switchAdminTab('orders', this)">📦 订单管理</div>
+          <div class="admin-tab" onclick="switchAdminTab('profit', this)">💰 利润分析</div>
         </div>
-        <div id="admin-users-section">
-          <h3>用户列表</h3>
-          <div id="admin-users">加载中...</div>
+        <div id="admin-tab-content">
+          <div class="admin-stats">
+            <div class="stat-card"><div class="stat-value">${s.totalUsers}</div><div class="stat-card-label">总用户</div><div class="stat-card-sub">今日+${s.todayNewUsers}</div></div>
+            <div class="stat-card"><div class="stat-value">${s.activeUsers}</div><div class="stat-card-label">活跃用户</div><div class="stat-card-sub">封禁 ${s.bannedUsers}</div></div>
+            <div class="stat-card"><div class="stat-value">${s.totalOrders}</div><div class="stat-card-label">总订单</div><div class="stat-card-sub">已支付</div></div>
+            <div class="stat-card"><div class="stat-value">¥${s.totalRevenue.toFixed(2)}</div><div class="stat-card-label">总收入</div><div class="stat-card-sub">今日 ¥${(s.todayRevenue||0).toFixed(2)}</div></div>
+            <div class="stat-card"><div class="stat-value">${s.totalCreditsConsumed}</div><div class="stat-card-label">已消耗积分</div><div class="stat-card-sub">人均 ${s.avgCreditsPerUser} 积分</div></div>
+            <div class="stat-card"><div class="stat-value">${s.totalCreditsRecharged}</div><div class="stat-card-label">已充值积分</div><div class="stat-card-sub"></div></div>
+          </div>
         </div>
-      </div>
-    `;
+      </div>`;
   } catch (e) {
     return '<div class="page-admin"><p>加载失败：' + e.message + '</p></div>';
   }
+}
+
+// ===== 管理后台：Tab 切换 =====
+async function switchAdminTab(tab, btn) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  const content = document.getElementById('admin-tab-content');
+  content.innerHTML = '<p style="text-align:center;padding:40px;">加载中...</p>';
+  try {
+    switch (tab) {
+      case 'dashboard': content.innerHTML = await renderAdminDashboard(); break;
+      case 'users': content.innerHTML = await renderAdminUsers(); break;
+      case 'orders': content.innerHTML = await renderAdminOrders(); break;
+      case 'profit': content.innerHTML = await renderAdminProfit(); break;
+    }
+  } catch (e) {
+    content.innerHTML = '<p style="color:red;">加载失败：' + e.message + '</p>';
+  }
+}
+
+// ===== 数据看板 =====
+async function renderAdminDashboard() {
+  const data = await api.get('/api/admin/dashboard');
+  const s = data.stats;
+  return `
+    <div class="admin-stats">
+      <div class="stat-card"><div class="stat-value">${s.totalUsers}</div><div class="stat-card-label">总用户</div><div class="stat-card-sub">今日+${s.todayNewUsers}</div></div>
+      <div class="stat-card"><div class="stat-value">${s.activeUsers}</div><div class="stat-card-label">活跃用户</div><div class="stat-card-sub">封禁 ${s.bannedUsers}</div></div>
+      <div class="stat-card"><div class="stat-value">${s.totalOrders}</div><div class="stat-card-label">已支付订单</div><div class="stat-card-sub"></div></div>
+      <div class="stat-card"><div class="stat-value">¥${s.totalRevenue.toFixed(2)}</div><div class="stat-card-label">总收入</div><div class="stat-card-sub">今日 ¥${(s.todayRevenue||0).toFixed(2)}</div></div>
+      <div class="stat-card"><div class="stat-value">${s.totalCreditsConsumed}</div><div class="stat-card-label">已消耗积分</div><div class="stat-card-sub">人均 ${s.avgCreditsPerUser} 积分</div></div>
+      <div class="stat-card"><div class="stat-value">${s.totalCreditsRecharged}</div><div class="stat-card-label">充值总积分</div><div class="stat-card-sub"></div></div>
+    </div>
+  `;
+}
+
+// ===== 用户管理 =====
+let adminUsersPage = 1, adminUsersSearch = '';
+async function renderAdminUsers(search, page) {
+  if (search !== undefined) adminUsersSearch = search;
+  if (page !== undefined) adminUsersPage = page;
+  const params = { limit: 20, page: adminUsersPage };
+  if (adminUsersSearch) params.search = adminUsersSearch;
+  const data = await api.get('/api/admin/users?' + new URLSearchParams(params).toString());
+  const pages = Math.ceil(data.total / data.limit);
+  const rows = data.users.map(u => `
+    <tr>
+      <td>${u.id}</td>
+      <td>${escHtml(u.nickname||'')}</td>
+      <td>${u.phone}${u.email ? '<br><small>'+escHtml(u.email)+'</small>' : ''}</td>
+      <td><strong>${u.credits}</strong></td>
+      <td>¥${(u.total_recharged||0).toFixed(2)}</td>
+      <td>${u.total_consumed||0}</td>
+      <td><span class="badge badge-${u.status==='active'?'success':'danger'}">${u.status}</span></td>
+      <td><span class="badge badge-${u.role==='admin'?'primary':'secondary'}">${u.role}</span></td>
+      <td>
+        <button class="btn-sm" onclick="showEditUser(${u.id})" title="编辑">✏️</button>
+      </td>
+    </tr>
+  `).join('');
+  let pagination = '';
+  if (pages > 1) {
+    pagination = '<div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">';
+    for (let i = 1; i <= pages; i++) {
+      pagination += '<button class="btn-sm' + (i === adminUsersPage ? ' btn-primary' : '') + '" onclick="renderAdminUsers(undefined,' + i + ').then(h=>document.getElementById(\'admin-tab-content\').innerHTML=h)">' + i + '</button>';
+    }
+    pagination += '</div>';
+  }
+  return `
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <input type="text" id="user-search" placeholder="搜索手机号/昵称/邮箱..." value="${escHtml(adminUsersSearch)}" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text);">
+      <button class="btn-primary" onclick="renderAdminUsers(document.getElementById('user-search').value,1).then(h=>document.getElementById('admin-tab-content').innerHTML=h)">搜索</button>
+    </div>
+    <div style="overflow-x:auto;"><table class="data-table" style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th>ID</th><th>昵称</th><th>手机号/邮箱</th><th>积分</th><th>累计充值</th><th>累计消费</th><th>状态</th><th>角色</th><th>操作</th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="9" style="text-align:center;padding:20px;">暂无数据</td></tr>'}</tbody>
+    </table></div>
+    <div style="margin-top:8px;color:var(--text-secondary);font-size:12px;">共 ${data.total} 个用户，第 ${data.page}/${pages} 页</div>
+    ${pagination}
+    <div id="user-edit-modal"></div>
+  `;
+}
+
+// ===== 编辑用户弹窗 =====
+async function showEditUser(userId) {
+  const data = await api.get('/api/admin/users/' + userId);
+  const u = data.user;
+  const modal = document.getElementById('user-edit-modal');
+  if (!modal) return;
+  modal.innerHTML = `
+    <div class="modal-overlay" onclick="document.getElementById('user-edit-modal').innerHTML=''">
+      <div class="modal-box" onclick="event.stopPropagation()" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:500px;margin:60px auto;">
+        <h3 style="margin:0 0 16px;">编辑用户 #${u.id}</h3>
+        <div style="margin-bottom:12px;"><label>手机号</label><input type="text" value="${u.phone}" disabled style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);"></div>
+        <div style="margin-bottom:12px;"><label>邮箱</label><input type="email" id="edit-email" value="${escHtml(u.email||'')}" placeholder="未绑定" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text);"></div>
+        <div style="margin-bottom:12px;"><label>昵称</label><input type="text" id="edit-nick" value="${escHtml(u.nickname||'')}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text);"></div>
+        <div style="margin-bottom:12px;"><label>积分余额（当前：${u.credits}）</label><input type="number" id="edit-credits" value="${u.credits}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text);"></div>
+        <div style="margin-bottom:12px;"><label>角色</label><select id="edit-role" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text);"><option value="user" ${u.role==='user'?'selected':''}>普通用户</option><option value="admin" ${u.role==='admin'?'selected':''}>管理员</option></select></div>
+        <div style="margin-bottom:12px;"><label>状态</label><select id="edit-status" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text);"><option value="active" ${u.status==='active'?'selected':''}>正常</option><option value="banned" ${u.status==='banned'?'selected':''}>封禁</option></select></div>
+        <div style="margin-bottom:12px;font-size:12px;color:var(--text-secondary);">
+          注册时间：${u.created_at} &nbsp;|&nbsp; 累计充值：¥${(u.total_recharged||0).toFixed(2)} &nbsp;|&nbsp; 累计消费：${u.total_consumed||0}积分
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn-secondary" onclick="document.getElementById('user-edit-modal').innerHTML=''">取消</button>
+          <button class="btn-primary" onclick="saveEditUser(${u.id})">保存</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function saveEditUser(userId) {
+  const credits = document.getElementById('edit-credits').value;
+  const role = document.getElementById('edit-role').value;
+  const status = document.getElementById('edit-status').value;
+  const nickname = document.getElementById('edit-nick').value;
+  const email = document.getElementById('edit-email').value;
+  try {
+    const body = {};
+    if (credits !== undefined) body.credits = parseInt(credits);
+    if (role) body.role = role;
+    if (status) body.status = status;
+    if (nickname !== undefined) body.nickname = nickname;
+    if (email !== undefined) body.email = email;
+    await api.put('/api/admin/users/' + userId, body);
+    document.getElementById('user-edit-modal').innerHTML = '';
+    showToast('用户信息已更新', 'success');
+    renderAdminUsers().then(h => document.getElementById('admin-tab-content').innerHTML = h);
+  } catch (e) {
+    showToast('保存失败：' + e.message, 'error');
+  }
+}
+
+// ===== 订单管理 =====
+let adminOrdersPage = 1, adminOrdersStatus = '';
+async function renderAdminOrders(status, page) {
+  if (status !== undefined) adminOrdersStatus = status;
+  if (page !== undefined) adminOrdersPage = page;
+  const params = { limit: 20, page: adminOrdersPage };
+  if (adminOrdersStatus) params.status = adminOrdersStatus;
+  const data = await api.get('/api/admin/orders?' + new URLSearchParams(params).toString());
+  const pages = Math.ceil(data.total / data.limit);
+  const rows = data.orders.map(o => `
+    <tr>
+      <td><code>${o.id}</code></td>
+      <td>${escHtml(o.nickname||'')}<br><small>${o.phone||''}</small></td>
+      <td>${o.package_name||''}</td>
+      <td>¥${o.amount.toFixed(2)}</td>
+      <td>${o.credits||0}</td>
+      <td>${o.payment_method||'模拟'}</td>
+      <td><span class="badge badge-${o.status==='paid'?'success':o.status==='pending'?'warning':'danger'}">${o.status}</span></td>
+      <td>${o.created_at||''}</td>
+    </tr>
+  `).join('');
+  return `
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <select id="order-status-filter" onchange="renderAdminOrders(this.value,1).then(h=>document.getElementById('admin-tab-content').innerHTML=h)" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text);">
+        <option value="">全部状态</option>
+        <option value="paid" ${adminOrdersStatus==='paid'?'selected':''}>已支付</option>
+        <option value="pending" ${adminOrdersStatus==='pending'?'selected':''}>待支付</option>
+        <option value="failed" ${adminOrdersStatus==='failed'?'selected':''}>失败</option>
+        <option value="refunded" ${adminOrdersStatus==='refunded'?'selected':''}>已退款</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto;"><table class="data-table" style="width:100%;border-collapse:collapse;">
+      <thead><tr><th>订单号</th><th>用户</th><th>套餐</th><th>金额</th><th>积分</th><th>支付方式</th><th>状态</th><th>时间</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="8" style="text-align:center;padding:20px;">暂无订单</td></tr>'}</tbody>
+    </table></div>
+    <div style="margin-top:8px;color:var(--text-secondary);font-size:12px;">共 ${data.total} 个订单，第 ${data.page}/${pages} 页</div>
+  `;
+}
+
+// ===== 利润分析 =====
+async function renderAdminProfit() {
+  const data = await api.get('/api/admin/profit');
+  const r = data.revenue, c = data.apiCost, p = data.profit, pr = data.pricing;
+  const packageCards = data.packageSales.map((s,i) => `
+    <tr>
+      <td>${s.package_name||'未知'}</td>
+      <td>${s.count}</td>
+      <td>¥${(s.revenue||0).toFixed(2)}</td>
+      <td>${s.total_credits||0}</td>
+    </tr>
+  `).join('');
+  const modelRows = c.details.map(m => `
+    <tr>
+      <td>${m.model}</td>
+      <td>${m.calls}</td>
+      <td>${m.creditsConsumed}</td>
+      <td>¥${m.unitCost.toFixed(3)}</td>
+      <td>¥${m.totalCost.toFixed(2)}</td>
+    </tr>
+  `).join('');
+  return `
+    <h3>利润概览</h3>
+    <div class="admin-stats">
+      <div class="stat-card"><div class="stat-value">¥${r.total.toFixed(2)}</div><div class="stat-card-label">总收入</div><div class="stat-card-sub">本月 ¥${(r.month||0).toFixed(2)}</div></div>
+      <div class="stat-card"><div class="stat-value">¥${c.total.toFixed(2)}</div><div class="stat-card-label">API 成本</div><div class="stat-card-sub">每次 ¥${c.perCall.toFixed(3)}</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--accent);">¥${p.gross.toFixed(2)}</div><div class="stat-card-label">净利润</div><div class="stat-card-sub">利润率 ${p.margin}%</div></div>
+      <div class="stat-card"><div class="stat-value">¥${pr.apiCostPerCreditAvg.toFixed(4)}</div><div class="stat-card-label">每积分API成本</div><div class="stat-card-sub">最低售价 ¥${pr.packages[3].costPerCredit} /积分</div></div>
+    </div>
+    <div class="chart-card">
+      <h4 style="margin:0 0 12px;">定价与利润分析</h4>
+      <div style="overflow-x:auto;"><table class="data-table" style="width:100%;border-collapse:collapse;">
+        <thead><tr><th>套餐</th><th>售价</th><th>积分</th><th>售价/积分</th><th>API成本/积分</th><th>利润率</th></tr></thead>
+        <tbody>
+          ${pr.packages.map(pkg => {
+            const apiCost = pr.apiCostPerCreditAvg * pkg.credits;
+            const margin = (((pkg.price - apiCost) / pkg.price) * 100).toFixed(1);
+            return '<tr><td>'+pkg.id+'</td><td>¥'+pkg.price.toFixed(2)+'</td><td>'+pkg.credits+'</td><td>¥'+pkg.costPerCredit.toFixed(3)+'</td><td>¥'+pr.apiCostPerCreditAvg.toFixed(4)+'</td><td>'+margin+'%</td></tr>';
+          }).join('')}
+        </tbody>
+      </table></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="chart-card">
+        <h4 style="margin:0 0 12px;">套餐销量分布</h4>
+        <div style="overflow-x:auto;"><table class="data-table" style="width:100%;border-collapse:collapse;">
+          <thead><tr><th>套餐</th><th>销量</th><th>收入</th><th>积分发放</th></tr></thead>
+          <tbody>${packageCards || '<tr><td colspan="4">暂无数据</td></tr>'}</tbody>
+        </table></div>
+      </div>
+      <div class="chart-card">
+        <h4 style="margin:0 0 12px;">模型调用成本明细</h4>
+        <div style="overflow-x:auto;"><table class="data-table" style="width:100%;border-collapse:collapse;">
+          <thead><tr><th>模型</th><th>调用次数</th><th>消耗积分</th><th>单价</th><th>总成本</th></tr></thead>
+          <tbody>${modelRows || '<tr><td colspan="5">暂无数据</td></tr>'}</tbody>
+        </table></div>
+      </div>
+    </div>
+    ${data.monthlyRevenue && data.monthlyRevenue.length > 0 ? `
+    <div class="chart-card" style="margin-top:16px;">
+      <h4 style="margin:0 0 12px;">月度收入趋势</h4>
+      <div style="overflow-x:auto;"><table class="data-table" style="width:100%;border-collapse:collapse;">
+        <thead><tr><th>月份</th><th>订单数</th><th>收入</th><th>卖出积分</th></tr></thead>
+        <tbody>${data.monthlyRevenue.map(m => '<tr><td>'+m.month+'</td><td>'+m.orders+'</td><td>¥'+(m.revenue||0).toFixed(2)+'</td><td>'+m.credits_sold+'</td></tr>').join('')}</tbody>
+      </table></div>
+    </div>` : ''}
+  `;
 }
 
 // ===== 工具函数 =====
