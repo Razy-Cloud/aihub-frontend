@@ -1,7 +1,15 @@
 {
-  "name": "aihub-frontend",
   "version": 2,
   "public": true,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" }
+      ]
+    }
+  ],
   "static": {
     "upload": [
       "index.html",
@@ -11,13 +19,7 @@
     ]
   },
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "https://aihub-backend-app-production.up.railway.app/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
-    }
+    { "src": "/api/(.*)", "dest": "https://aihub-backend-app-production.up.railway.app/api/" },
+    { "src": "/(.*)", "dest": "/" }
   ]
 }
