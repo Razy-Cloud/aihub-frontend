@@ -20,10 +20,10 @@ const MOCK_DATA = {
   models: [
     { id: "deepseek-v3", name: "DeepSeek V3", tier: "basic", tierLabel: "入门档", desc: "高性价比通用大模型，适合日常对话与写作", costPer1k: 1, costPerCall: 1, badge: "免费试用", icon: "🧠" },
     { id: "qwen-plus", name: "Qwen Plus", tier: "basic", tierLabel: "入门档", desc: "通义千问增强版，中文理解能力强", costPer1k: 2, costPerCall: 1, badge: "", icon: "🧠" },
-    { id: "gpt-4o-mini", name: "GPT-4o mini", tier: "advanced", tierLabel: "进阶档", desc: "OpenAI 轻量级模型，响应快速", costPer1k: 4, costPerCall: 3, badge: "热门", icon: "⚡" },
+    { id: "doubao-lite-32k", name: "豆包 Lite", tier: "advanced", tierLabel: "进阶档", desc: "字节跳动轻量级模型，响应快速性价比高", costPer1k: 2, costPerCall: 2, badge: "热门", icon: "⚡" },
     { id: "claude-haiku", name: "Claude 3.5 Haiku", tier: "advanced", tierLabel: "进阶档", desc: "Anthropic 快速模型，擅长代码与分析", costPer1k: 5, costPerCall: 3, badge: "", icon: "⚡" },
     { id: "glm-4-plus", name: "GLM-4 Plus", tier: "advanced", tierLabel: "进阶档", desc: "智谱旗舰模型，逻辑推理出色", costPer1k: 3, costPerCall: 3, badge: "", icon: "⚡" },
-    { id: "gpt-4o", name: "GPT-4o", tier: "flagship", tierLabel: "旗舰档", desc: "OpenAI 旗舰多模态模型，能力全面", costPer1k: 10, costPerCall: 10, badge: "推荐", icon: "🏆" },
+    { id: "doubao-pro-32k", name: "豆包 Pro", tier: "flagship", tierLabel: "旗舰档", desc: "字节跳动旗舰模型，中文能力强", costPer1k: 5, costPerCall: 5, badge: "推荐", icon: "🏆" },
     { id: "claude-opus", name: "Claude 3.5 Opus", tier: "flagship", tierLabel: "旗舰档", desc: "Anthropic 最强模型，长文本与深度分析", costPer1k: 12, costPerCall: 10, badge: "", icon: "🏆" },
     { id: "gemini-pro", name: "Gemini 2.0 Pro", tier: "flagship", tierLabel: "旗舰档", desc: "Google 旗舰模型，超长上下文支持", costPer1k: 8, costPerCall: 10, badge: "", icon: "🏆" },
     { id: "deepseek-r1", name: "DeepSeek R1", tier: "reasoning", tierLabel: "推理档", desc: "深度推理模型，适合复杂数学与逻辑", costPer1k: 16, costPerCall: 15, badge: "新上线", icon: "🔬" },
@@ -74,11 +74,11 @@ const MOCK_DATA = {
 
   // 消费明细
   transactions: [
-    { id: "tx1", time: "2026-06-27 10:32", type: "消费", tool: "GPT-4o 对话", amount: -10, balance: 3280, status: "成功" },
+    { id: "tx1", time: "2026-06-27 10:32", type: "消费", tool: "豆包 Pro 对话", amount: -10, balance: 3280, status: "成功" },
     { id: "tx2", time: "2026-06-27 09:15", type: "消费", tool: "Midjourney 文生图 ×2", amount: -20, balance: 3290, status: "成功" },
     { id: "tx3", time: "2026-06-26 22:40", type: "消费", tool: "DeepSeek R1 推理", amount: -15, balance: 3310, status: "成功" },
     { id: "tx4", time: "2026-06-26 20:10", type: "消费", tool: "可灵 AI 视频生成", amount: -50, balance: 3325, status: "成功" },
-    { id: "tx5", time: "2026-06-26 14:22", type: "消费", tool: "GPT-4o mini 对话", amount: -3, balance: 3375, status: "成功" },
+    { id: "tx5", time: "2026-06-26 14:22", type: "消费", tool: "豆包 Lite 对话", amount: -3, balance: 3375, status: "成功" },
     { id: "tx6", time: "2026-06-26 00:00", type: "签到奖励", tool: "每日签到", amount: +5, balance: 3378, status: "成功" },
     { id: "tx7", time: "2026-06-25 16:30", type: "充值", tool: "99元积分包", amount: +1200, balance: 3373, status: "成功" },
     { id: "tx8", time: "2026-06-25 12:00", type: "会员赠送", tool: "月度会员积分", amount: +300, balance: 2173, status: "成功" },
@@ -98,9 +98,9 @@ const MOCK_DATA = {
 
   // 对话历史
   chatHistory: [
-    { id: "c1", title: "React 性能优化方案", model: "GPT-4o", time: "今天 10:32", preview: "React 应用性能优化可以从以下几个维度..." },
+    { id: "c1", title: "React 性能优化方案", model: "豆包 Pro", time: "今天 10:32", preview: "React 应用性能优化可以从以下几个维度..." },
     { id: "c2", title: "市场调研报告撰写", model: "Claude 3.5 Opus", time: "昨天 15:20", preview: "基于您提供的数据，我建议从以下角度..." },
-    { id: "c3", title: "Python 数据清洗脚本", model: "GPT-4o mini", time: "前天 09:10", preview: "以下是完整的数据清洗脚本，使用 pandas..." },
+    { id: "c3", title: "Python 数据清洗脚本", model: "豆包 Lite", time: "前天 09:10", preview: "以下是完整的数据清洗脚本，使用 pandas..." },
     { id: "c4", title: "英文论文翻译润色", model: "DeepSeek V3", time: "3天前", preview: "以下是翻译并润色后的内容..." },
     { id: "c5", title: "产品需求文档评审", model: "DeepSeek R1", time: "5天前", preview: "经过分析，该PRD在以下方面需要补充..." },
   ],
