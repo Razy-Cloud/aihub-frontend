@@ -192,9 +192,11 @@ table.data tr:hover td { background: #fafbff; }
   </div>
 </div>
 
+<script src="js/config.js"></script>
 <script>
 // ===== CONFIG =====
-const API = 'https://aihub-backend-app-production.up.railway.app';
+// 通过 config.js 配置，生产环境走 Vercel 代理（相对路径），本地开发时改 config.js
+const API = (typeof AIHUB_CONFIG !== 'undefined' && AIHUB_CONFIG.API_BASE) ? AIHUB_CONFIG.API_BASE : '';
 let TOKEN = localStorage.getItem('aihub_admin_token') || '';
 let USER = JSON.parse(localStorage.getItem('aihub_admin_user') || 'null');
 
