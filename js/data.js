@@ -24,6 +24,8 @@ const MOCK_DATA = {
     { id: "claude-haiku", name: "Claude 3.5 Haiku", tier: "advanced", tierLabel: "进阶档", desc: "Anthropic 快速模型，擅长代码与分析", costPer1k: 5, costPerCall: 3, badge: "", icon: "⚡" },
     { id: "glm-4-plus", name: "GLM-4 Plus", tier: "advanced", tierLabel: "进阶档", desc: "智谱旗舰模型，逻辑推理出色", costPer1k: 3, costPerCall: 3, badge: "", icon: "⚡" },
     { id: "doubao-pro-32k", name: "豆包 Pro", tier: "flagship", tierLabel: "旗舰档", desc: "字节跳动旗舰模型，中文能力强", costPer1k: 5, costPerCall: 5, badge: "推荐", icon: "🏆" },
+    { id: "mimo-v2.5", name: "MiMo-V2.5", tier: "advanced", tierLabel: "进阶档", desc: "小米全模态模型，支持图像/视频/音频理解", costPer1k: 3, costPerCall: 3, badge: "新上线", icon: "🎯" },
+    { id: "mimo-v2.5-pro", name: "MiMo-V2.5 Pro", tier: "flagship", tierLabel: "旗舰档", desc: "小米旗舰模型，1M超长上下文", costPer1k: 8, costPerCall: 8, badge: "", icon: "🏆" },
     { id: "claude-opus", name: "Claude 3.5 Opus", tier: "flagship", tierLabel: "旗舰档", desc: "Anthropic 最强模型，长文本与深度分析", costPer1k: 12, costPerCall: 10, badge: "", icon: "🏆" },
     { id: "gemini-pro", name: "Gemini 2.0 Pro", tier: "flagship", tierLabel: "旗舰档", desc: "Google 旗舰模型，超长上下文支持", costPer1k: 8, costPerCall: 10, badge: "", icon: "🏆" },
     { id: "deepseek-r1", name: "DeepSeek R1", tier: "reasoning", tierLabel: "推理档", desc: "深度推理模型，适合复杂数学与逻辑", costPer1k: 16, costPerCall: 15, badge: "新上线", icon: "🔬" },
