@@ -2,7 +2,9 @@
  * AIHub 前端 - 白色简约主题 + 消息操作
  * 对接 server/src/index.js 提供的 API
  */
-const API_BASE = 'https://aihub-backend-app-production.up.railway.app';
+const API_BASE = (typeof AIHUB_CONFIG !== 'undefined' && AIHUB_CONFIG.API_BASE)
+  ? AIHUB_CONFIG.API_BASE
+  : '';  // 空字符串 = 使用相对路径，Vercel 代理到后端
 
 // ===== 全局状态 =====
 const state = {
@@ -12,6 +14,8 @@ const state = {
   config: { mockMode: true, providers: {} },
   models: [],  // 模型列表（从后端加载）
   currentModel: '',
+  autoMode: false,  // 自动模式：根据消息智能选择模型
+  maxMode: false,   // Max 模式：优先使用最强模型
   chatHistory: [],
   selectedPackage: null,
 };
@@ -117,10 +121,9 @@ async function login(phone, password) {
   }
 }
 
-async function register(phone, password, nickname, email) {
+async function register(phone, password, nickname, email, emailCode) {
   try {
-    const body = { phone, password, nickname };
-    if (email) body.email = email;
+    const body = { phone, password, nickname, email, emailCode };
     const data = await api.post('/api/auth/register', body);
     state.token = data.token;
     state.user = data.user;
@@ -195,7 +198,32 @@ function showLogin() {
             <input type="password" id="login-pwd" placeholder="请输入密码">
           </div>
           <button class="btn-primary" onclick="doLogin()">登 录</button>
-          <div class="login-hint">注册新账号赠送50积分</div>
+          <div class="login-hint">
+            <a href="javascript:showResetPwd()" style="color:var(--accent);text-decoration:none;font-size:13px">忘记密码？</a>
+          </div>
+        </div>
+        <div id="reset-pwd-form" class="login-form" style="display:none">
+          <h3 style="text-align:center;margin-bottom:16px">重置密码</h3>
+          <p style="font-size:13px;color:var(--text-secondary);text-align:center;margin-bottom:16px">输入注册邮箱，我们将发送验证码</p>
+          <div class="form-group">
+            <label>注册邮箱</label>
+            <input type="email" id="reset-email" placeholder="请输入注册时的邮箱">
+          </div>
+          <div class="form-group">
+            <label>邮箱验证码</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="reset-email-code" placeholder="请输入6位验证码" maxlength="6" style="flex:1">
+              <button class="btn-send-code" id="btn-reset-send-code" onclick="sendResetEmailCode()" style="white-space:nowrap;padding:8px 14px;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:6px;cursor:pointer;font-size:13px">发送验证码</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>新密码</label>
+            <input type="password" id="reset-new-pwd" placeholder="请输入新密码（≥6位）">
+          </div>
+          <button class="btn-primary" onclick="doResetPwd()">重置密码</button>
+          <div class="login-hint">
+            <a href="javascript:showLoginForm()" style="color:var(--accent);text-decoration:none;font-size:13px">返回登录</a>
+          </div>
         </div>
         <div id="register-form" class="login-form" style="display:none">
           <div class="form-group">
@@ -203,8 +231,15 @@ function showLogin() {
             <input type="tel" id="reg-phone" placeholder="请输入手机号">
           </div>
           <div class="form-group">
-            <label>邮箱（选填，用于找回密码）</label>
-            <input type="email" id="reg-email" placeholder="请输入邮箱（选填）">
+            <label>邮箱 <span style="color:#ef4444">*</span></label>
+            <input type="email" id="reg-email" placeholder="请输入邮箱（用于找回密码）">
+          </div>
+          <div class="form-group">
+            <label>邮箱验证码</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="reg-email-code" placeholder="请输入6位验证码" maxlength="6" style="flex:1">
+              <button class="btn-send-code" id="btn-send-code" onclick="sendRegEmailCode()" style="white-space:nowrap;padding:8px 14px;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:6px;cursor:pointer;font-size:13px">发送验证码</button>
+            </div>
           </div>
           <div class="form-group">
             <label>昵称</label>
@@ -228,11 +263,62 @@ function switchLoginTab(tab, btn) {
   document.getElementById('register-form').style.display = tab === 'register' ? '' : 'none';
 }
 
-function doLogin() {
-  const phone = document.getElementById('login-phone').value.trim();
-  const pwd = document.getElementById('login-pwd').value;
-  if (!phone || !pwd) return showToast('请填写完整', 'error');
-  login(phone, pwd);
+function showResetPwd() {
+  document.querySelectorAll('.login-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('reset-pwd-form').style.display = '';
+}
+
+function showLoginForm() {
+  document.getElementById('reset-pwd-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('login-form').style.display = '';
+  document.querySelectorAll('.login-tabs .tab-btn')[0].classList.add('active');
+}
+
+let resetEmailCooldown = 0;
+async function sendResetEmailCode() {
+  const email = document.getElementById('reset-email').value.trim();
+  if (!email) return showToast('请输入注册邮箱', 'error');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('邮箱格式不正确', 'error');
+  if (resetEmailCooldown > 0) return showToast('请 ' + resetEmailCooldown + ' 秒后再试', 'error');
+  
+  const btn = document.getElementById('btn-reset-send-code');
+  btn.disabled = true;
+  try {
+    await api.post('/api/auth/send-email-code', { email, type: 'reset' });
+    showToast('验证码已发送到您的邮箱', 'success');
+    resetEmailCooldown = 60;
+    const tick = setInterval(() => {
+      resetEmailCooldown--;
+      if (resetEmailCooldown <= 0) {
+        clearInterval(tick);
+        btn.textContent = '发送验证码';
+        btn.disabled = false;
+      } else {
+        btn.textContent = resetEmailCooldown + 's 后重发';
+      }
+    }, 1000);
+  } catch (e) {
+    showToast('发送失败：' + e.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+async function doResetPwd() {
+  const email = document.getElementById('reset-email').value.trim();
+  const code = document.getElementById('reset-email-code').value.trim();
+  const newPwd = document.getElementById('reset-new-pwd').value;
+  if (!email || !code || !newPwd) return showToast('请填写完整', 'error');
+  if (newPwd.length < 6) return showToast('密码至少6位', 'error');
+  try {
+    await api.post('/api/auth/reset-password', { email, code, newPassword: newPwd });
+    showToast('密码重置成功，请重新登录', 'success');
+    setTimeout(() => showLoginForm(), 1500);
+  } catch (e) {
+    showToast('重置失败：' + e.message, 'error');
+  }
 }
 
 function doRegister() {
@@ -240,9 +326,42 @@ function doRegister() {
   const pwd = document.getElementById('reg-pwd').value;
   const nick = document.getElementById('reg-nick').value.trim();
   const email = document.getElementById('reg-email').value.trim();
-  if (!phone || !pwd) return showToast('请填写完整', 'error');
+  const emailCode = document.getElementById('reg-email-code').value.trim();
+  if (!phone || !pwd || !email) return showToast('手机号、邮箱、密码为必填项', 'error');
+  if (!emailCode) return showToast('请输入邮箱验证码', 'error');
   if (pwd.length < 6) return showToast('密码至少6位', 'error');
-  register(phone, pwd, nick, email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('邮箱格式不正确', 'error');
+  register(phone, pwd, nick, email, emailCode);
+}
+
+// 发送注册邮箱验证码
+let emailCodeCooldown = 0;
+async function sendRegEmailCode() {
+  const email = document.getElementById('reg-email').value.trim();
+  if (!email) return showToast('请先输入邮箱地址', 'error');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('邮箱格式不正确', 'error');
+  if (emailCodeCooldown > 0) return showToast('请 ' + emailCodeCooldown + ' 秒后再试', 'error');
+  
+  const btn = document.getElementById('btn-send-code');
+  btn.disabled = true;
+  try {
+    await api.post('/api/auth/send-email-code', { email, type: 'register' });
+    showToast('验证码已发送到您的邮箱', 'success');
+    emailCodeCooldown = 60;
+    const tick = setInterval(() => {
+      emailCodeCooldown--;
+      if (emailCodeCooldown <= 0) {
+        clearInterval(tick);
+        btn.textContent = '发送验证码';
+        btn.disabled = false;
+      } else {
+        btn.textContent = emailCodeCooldown + 's 后重发';
+      }
+    }, 1000);
+  } catch (e) {
+    showToast('发送失败：' + e.message, 'error');
+    btn.disabled = false;
+  }
 }
 
 async function showApp() {
@@ -330,24 +449,55 @@ function renderDashboard() {
 
 function renderChat() {
   const models = state.models.length > 0 ? state.models : [
-    { id: 'deepseek-chat', name: 'DeepSeek V3', tierLabel: '入门档', costPer1k: 2 },
+    { id: 'deepseek-chat', name: 'DeepSeek V3', tierLabel: '入门档', costPer1k: 2, provider: 'deepseek' },
   ];
   // 确保当前模型在列表中
-  if (!state.currentModel || !models.find(m => m.id === state.currentModel)) {
+  if (!state.autoMode && (!state.currentModel || !models.find(m => m.id === state.currentModel))) {
     state.currentModel = models[0].id;
   }
   return `
     <div class="page-chat">
       <div class="chat-layout">
-        <!-- 左侧模型列表 -->
+        <!-- 左侧模型选择器 -->
         <div class="chat-sidebar">
-          <h4>选择模型</h4>
-          ${models.map(m => `
-            <div class="model-item ${m.tier === 'reasoning' ? 'reasoning' : ''}" onclick="selectModel('${m.id}')" id="model-${m.id}">
-              <div class="model-name">${m.name}</div>
-              <div class="model-tier">${m.tierLabel} · ${m.costPer1k}积分/1k tokens</div>
+          <div class="model-selector-header">
+            <label class="toggle-row">
+              <span>自动模式</span>
+              <input type="checkbox" id="auto-mode" ${state.autoMode ? 'checked' : ''} onchange="toggleAutoMode(this)">
+              <span class="toggle-slider"></span>
+            </label>
+            <label class="toggle-row">
+              <span>Max 模式</span>
+              <input type="checkbox" id="max-mode" ${state.maxMode ? 'checked' : ''} onchange="toggleMaxMode(this)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="model-dropdown-wrapper">
+            <div class="model-dropdown-trigger" onclick="toggleModelDropdown()" id="model-dropdown-trigger">
+              <span class="trigger-left">
+                <span class="provider-badge auto">${state.autoMode ? 'Auto' : getProviderInitial(getCurrentModel().provider)}</span>
+                <span id="selected-model-label">${getSelectedModelLabel()}</span>
+              </span>
+              <span class="dropdown-chevron">▾</span>
             </div>
-          `).join('')}
+            <div class="model-dropdown" id="model-dropdown" style="display:none">
+              <div class="dropdown-section">内置模型</div>
+              <div class="dropdown-item auto ${state.autoMode ? 'active' : ''}" onclick="selectModel('auto')">
+                <span class="provider-badge auto">Auto</span>
+                <span class="model-name">自动选择</span>
+                <span class="checkmark">${state.autoMode ? '✓' : ''}</span>
+              </div>
+              ${models.map(m => `
+                <div class="dropdown-item ${state.currentModel === m.id && !state.autoMode ? 'active' : ''}" onclick="selectModel('${m.id}')">
+                  <span class="provider-badge ${m.provider}">${getProviderInitial(m.provider)}</span>
+                  <span class="model-name">${m.name}</span>
+                  <span class="multiplier">${getMultiplier(m.costPer1k)}x</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
           <div class="chat-tools">
             <label><input type="checkbox" id="web-search"> 联网搜索 (+2积分)</label>
           </div>
@@ -357,7 +507,7 @@ function renderChat() {
           <div class="chat-messages" id="chat-messages">
             <div class="welcome-msg">
               <p>👋 你好！我是 AIHub 助手。</p>
-              <p>请选择左侧模型，然后开始对话。</p>
+              <p>请选择模型或开启自动模式，然后开始对话。</p>
             </div>
           </div>
           <div class="chat-input-area">
@@ -366,7 +516,7 @@ function renderChat() {
               <button class="send-btn" id="send-btn" onclick="sendMessage()">发送</button>
             </div>
             <div class="input-hint">
-              消耗预估：<span id="est-cost">${getModelCost(state.currentModel)}</span> 积分 ｜ 余额：<span id="user-credits">${state.user.credits}</span> 积分
+              消耗预估：<span id="est-cost">${getModelCost(getModelForSend())}</span> 积分 ｜ 余额：<span id="user-credits">${state.user.credits}</span> 积分
             </div>
           </div>
         </div>
@@ -396,13 +546,132 @@ function autoResize(textarea) {
 }
 
 function selectModel(modelId) {
-  state.currentModel = modelId;
-  document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
-  const el = document.getElementById('model-' + modelId);
-  if (el) el.classList.add('active');
-  const cost = getModelCost(modelId);
+  if (modelId === 'auto') {
+    state.autoMode = true;
+  } else {
+    state.autoMode = false;
+    state.currentModel = modelId;
+  }
+  closeModelDropdown();
+  refreshModelSelectorUI();
+}
+
+// 获取当前模型（考虑自动模式）
+function getCurrentModel() {
+  if (state.autoMode) return { id: 'auto', name: '自动选择', provider: 'auto' };
+  const m = state.models.find(x => x.id === state.currentModel);
+  return m || state.models[0] || { id: 'deepseek-chat', name: 'DeepSeek V3', provider: 'deepseek' };
+}
+
+// 自动模式下选择实际发送模型
+function getModelForSend(msg = '') {
+  if (!state.autoMode) return state.currentModel;
+  const models = state.models.length ? state.models : [{ id: 'deepseek-chat', costPer1k: 2, tier: 'basic' }];
+  // Max 模式：选择最强模型
+  if (state.maxMode) {
+    const tiers = ['reasoning', 'flagship', 'advanced', 'basic'];
+    for (const tier of tiers) {
+      const m = models.find(x => x.tier === tier);
+      if (m) return m.id;
+    }
+  }
+  // 根据消息复杂度选择
+  const isComplex = /为什么|如何|解释|分析|步骤|代码|推理|证明|对比|优化|设计|方案|架构|debug|报错|算法|数学|逻辑/i.test(msg);
+  const isCode = /代码|编程|函数|script|代码块|bug|error|报错|python|javascript|java|cpp|go|rust/i.test(msg);
+  if (isComplex) {
+    const preferred = models.find(x => x.tier === 'reasoning');
+    if (preferred) return preferred.id;
+  }
+  if (isCode) {
+    const preferred = models.find(x => x.id.includes('coder'));
+    if (preferred) return preferred.id;
+  }
+  // 默认选择最便宜的基础/进阶模型
+  const cheap = models.filter(x => x.tier !== 'reasoning');
+  cheap.sort((a, b) => a.costPer1k - b.costPer1k);
+  return cheap[0].id;
+}
+
+// 刷新模型选择器 UI（触发器 + 下拉项 + 消耗预估）
+function refreshModelSelectorUI() {
+  const trigger = document.getElementById('model-dropdown-trigger');
+  const label = document.getElementById('selected-model-label');
+  const model = getCurrentModel();
+  if (trigger && label) {
+    const badgeHtml = state.autoMode
+      ? '<span class="provider-badge auto">Auto</span>'
+      : `<span class="provider-badge ${model.provider}">${getProviderInitial(model.provider)}</span>`;
+    trigger.querySelector('.trigger-left').innerHTML = badgeHtml + `<span id="selected-model-label">${getSelectedModelLabel()}</span>`;
+  }
+  // 下拉项 active 状态
+  document.querySelectorAll('.dropdown-item').forEach(el => {
+    const isAuto = el.classList.contains('auto');
+    el.classList.toggle('active', (isAuto && state.autoMode) || (!isAuto && !state.autoMode && el.getAttribute('onclick')?.includes(state.currentModel)));
+    const check = el.querySelector('.checkmark');
+    if (check && isAuto) check.textContent = state.autoMode ? '✓' : '';
+  });
+  // 消耗预估
   const estEl = document.getElementById('est-cost');
-  if (estEl) estEl.textContent = cost;
+  if (estEl) estEl.textContent = getModelCost(getModelForSend());
+}
+
+// 下拉开关
+function toggleModelDropdown() {
+  const dd = document.getElementById('model-dropdown');
+  if (!dd) return;
+  const isOpen = dd.style.display !== 'none';
+  dd.style.display = isOpen ? 'none' : 'block';
+}
+
+function closeModelDropdown() {
+  const dd = document.getElementById('model-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+// 点击外部关闭下拉
+function handleModelDropdownClickOutside(e) {
+  const wrapper = document.querySelector('.model-dropdown-wrapper');
+  if (wrapper && !wrapper.contains(e.target)) closeModelDropdown();
+}
+
+function toggleAutoMode(el) {
+  state.autoMode = el.checked;
+  if (state.autoMode) state.currentModel = '';
+  refreshModelSelectorUI();
+}
+
+function toggleMaxMode(el) {
+  state.maxMode = el.checked;
+  refreshModelSelectorUI();
+}
+
+// Provider 缩写
+function getProviderInitial(provider) {
+  const map = {
+    deepseek: 'DS',
+    qwen: 'Qw',
+    doubao: 'Db',
+    mimo: 'Mi',
+    openai: 'OA',
+  };
+  return map[provider] || (provider ? provider.slice(0, 2).toUpperCase() : 'AI');
+}
+
+// 以基础模型 2 积分为基准，计算倍数
+function getMultiplier(costPer1k) {
+  return (costPer1k / 2).toFixed(2);
+}
+
+function getSelectedModelLabel() {
+  if (state.autoMode) return '自动选择';
+  const m = state.models.find(x => x.id === state.currentModel);
+  return m ? m.name : '选择模型';
+}
+
+// 获取模型积分消耗
+function getModelCost(modelId) {
+  const m = state.models.find(x => x.id === modelId);
+  return m ? m.costPer1k : 2;
 }
 
 // ===== 消息渲染（含操作按钮）=====
@@ -449,7 +718,8 @@ async function sendMessage() {
 
   try {
     document.getElementById('send-btn').disabled = true;
-    await api.streamChat(msg, state.currentModel,
+    const sendModel = getModelForSend(msg);
+    await api.streamChat(msg, sendModel,
       (token) => {
         fullContent += token;
         bubble.innerHTML = escHtml(fullContent) + '<span class="streaming-cursor">▌</span>';
@@ -1037,7 +1307,7 @@ function showPage(page) {
   const main = document.getElementById('main-content');
   switch (page) {
     case 'dashboard': main.innerHTML = renderDashboard(); break;
-    case 'chat': main.innerHTML = renderChat(); selectModel('deepseek-chat'); break;
+    case 'chat': main.innerHTML = renderChat(); refreshModelSelectorUI(); break;
     case 'credits': main.innerHTML = renderCredits(); loadTransactions(); checkPaymentReturn(); initPayPalButtons(); break;
     case 'tasks': main.innerHTML = renderTasks(); break;
     case 'image': main.innerHTML = renderImage(); break;
@@ -1401,6 +1671,7 @@ function toggleUserMenu(e) {
 document.addEventListener('click', () => {
   const dd = document.getElementById('user-dropdown');
   if (dd) dd.style.display = 'none';
+  closeModelDropdown();
 });
 
 // 初始化
