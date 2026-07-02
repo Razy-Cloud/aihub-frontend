@@ -135,16 +135,76 @@ body {
   width: 260px; background: #fff; border-right: 1px solid #eee;
   padding: 20px 16px; overflow-y: auto; border-radius: 14px 0 0 14px;
 }
-.chat-sidebar h4 { color: #999; font-size: 12px; margin: 0 0 14px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-.model-item {
-  padding: 10px 14px; border-radius: 10px; cursor: pointer; margin-bottom: 4px;
-  border: 1.5px solid transparent; transition: all 0.2s;
+
+/* 自动 / Max 开关 */
+.model-selector-header { margin-bottom: 14px; }
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  color: #333; font-size: 13px; padding: 8px 0; cursor: pointer;
 }
-.model-item:hover { background: #f8f6ff; }
-.model-item.active { background: #f0ecff; border-color: #7c5cfc; }
-.model-item.reasoning { border-left: 3px solid #f59e0b; }
-.model-name { font-size: 14px; color: #333; font-weight: 500; }
-.model-tier { font-size: 12px; color: #999; margin-top: 2px; }
+.toggle-row input { display: none; }
+.toggle-slider {
+  width: 38px; height: 20px; background: #ddd; border-radius: 20px;
+  position: relative; transition: background 0.2s;
+}
+.toggle-slider::after {
+  content: ''; position: absolute; left: 2px; top: 2px;
+  width: 16px; height: 16px; background: #fff; border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle-row input:checked + .toggle-slider { background: #7c5cfc; }
+.toggle-row input:checked + .toggle-slider::after { transform: translateX(18px); }
+
+/* 模型下拉 */
+.model-dropdown-wrapper { position: relative; margin-bottom: 12px; }
+.model-dropdown-trigger {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; background: #fafbfe; border: 1px solid #e0e0e0;
+  border-radius: 10px; cursor: pointer; color: #333; font-size: 14px;
+  transition: border-color 0.2s; font-weight: 500;
+}
+.model-dropdown-trigger:hover { border-color: #7c5cfc; }
+.trigger-left { display: flex; align-items: center; gap: 10px; }
+.dropdown-chevron { color: #999; font-size: 12px; }
+
+.model-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: #fff; border: 1px solid #eee; border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 100;
+  max-height: 360px; overflow-y: auto; padding: 6px;
+}
+.dropdown-section {
+  color: #999; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.5px; padding: 6px 10px 4px;
+  pointer-events: none;
+}
+.dropdown-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 8px; cursor: pointer;
+  color: #333; font-size: 13px; transition: background 0.15s;
+}
+.dropdown-item:hover { background: #f5f3ff; }
+.dropdown-item.active { background: #f0ecff; }
+.dropdown-item .model-name { flex: 1; font-weight: 500; }
+.dropdown-item .checkmark { color: #7c5cfc; font-weight: bold; }
+
+/* Provider 徽章 */
+.provider-badge {
+  width: 28px; height: 28px; border-radius: 6px; display: flex;
+  align-items: center; justify-content: center; font-size: 10px;
+  font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.provider-badge.auto { background: #7c5cfc; }
+.provider-badge.deepseek { background: #4f6ef7; }
+.provider-badge.qwen { background: #9b59b6; }
+.provider-badge.doubao { background: #3b82f6; }
+.provider-badge.mimo { background: #ff6900; }
+.provider-badge.openai { background: #10a37f; }
+
+.multiplier {
+  color: #999; font-size: 12px; font-variant-numeric: tabular-nums;
+}
+
 .chat-tools { margin-top: 18px; color: #999; font-size: 13px; }
 .chat-tools label { cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .chat-tools input[type="checkbox"] { accent-color: #7c5cfc; }
