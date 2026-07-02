@@ -5,7 +5,7 @@
 // ===== 全局状态 =====
 const state = {
   currentRoute: "dashboard",
-  currentModel: MOCK_DATA.models[5], // 默认 GPT-4o
+  currentModel: MOCK_DATA.models[5], // 默认 豆包 Pro
   chatMessages: [],
   chatHistory: MOCK_DATA.chatHistory,
   selectedImageModel: MOCK_DATA.imageModels[0],
